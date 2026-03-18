@@ -166,6 +166,11 @@ For the generic refactor direction and capability-gap framing, see the companion
 - `docs/unreal-ai-playbook/gym/hub-vs-remotemcp-boundary.zh-CN.md`
 - `docs/unreal-ai-playbook/gym/gym-tooling-backlog.zh-CN.md`
 
+For this fork's first concrete implementation target, see:
+
+- `docs/compatibility_refactor_roadmap.md`
+- `docs/p0_map_lifecycle_design.md`
+
 ## Upstream
 
 This repository is a fork of the original `blackplume233/UnrealRemoteMCP`.
