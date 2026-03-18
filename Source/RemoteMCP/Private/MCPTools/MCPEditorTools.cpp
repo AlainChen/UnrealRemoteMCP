@@ -15,6 +15,7 @@
 #include "Engine/Selection.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/StaticMeshActor.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/DirectionalLight.h"
 #include "Engine/PointLight.h"
 #include "Engine/SpotLight.h"
@@ -65,6 +66,58 @@ namespace
         ResultObj->SetStringField(TEXT("map_path"), MapPath);
         ResultObj->SetBoolField(TEXT("loaded"), bLoaded);
         return ResultObj;
+    }
+
+    UWorld* GetEditorWorldChecked()
+    {
+        return GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    }
+
+    void GetAllEditorActors(TArray<AActor*>& OutActors)
+    {
+        OutActors.Reset();
+        UWorld* World = GetEditorWorldChecked();
+        if (!World)
+        {
+            return;
+        }
+        UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), OutActors);
+    }
+
+    AActor* FindActorByExactName(const FString& ActorName)
+    {
+        TArray<AActor*> AllActors;
+        GetAllEditorActors(AllActors);
+        for (AActor* Actor : AllActors)
+        {
+            if (Actor && Actor->GetName() == ActorName)
+            {
+                return Actor;
+            }
+        }
+        return nullptr;
+    }
+
+    bool ActorMatchesPrefix(AActor* Actor, const FString& Prefix)
+    {
+        if (!Actor)
+        {
+            return false;
+        }
+
+        if (Actor->GetName().StartsWith(Prefix))
+        {
+            return true;
+        }
+
+#if WITH_EDITOR
+        if (Actor->GetActorLabel().StartsWith(Prefix))
+        {
+            return true;
+        }
+#endif
+
+        return false;
     }
 }
 
@@ -791,6 +844,199 @@ FJsonObjectParameter UMCPEditorTools::HandleCreateMapFromTemplate(const FJsonObj
     }
 
     return CreateMapLifecycleSuccess(TEXT("create_map_from_template"), NormalizedMapPath, true);
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleSpawnStaticMeshActor(const FJsonObjectParameter& Params)
+{
+    FString ActorName;
+    FString MeshPath;
+    if (!Params->TryGetStringField(TEXT("name"), ActorName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'name' parameter"));
+    }
+    if (!Params->TryGetStringField(TEXT("mesh_path"), MeshPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'mesh_path' parameter"));
+    }
+
+    UWorld* World = GetEditorWorldChecked();
+    if (!World)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    if (FindActorByExactName(ActorName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Actor with name '%s' already exists"), *ActorName));
+    }
+
+    UStaticMesh* StaticMesh = LoadObject<UStaticMesh>(nullptr, *MeshPath);
+    if (!StaticMesh)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Static mesh not found: %s"), *MeshPath));
+    }
+
+    FVector Location(0.0f, 0.0f, 0.0f);
+    FRotator Rotation(0.0f, 0.0f, 0.0f);
+    FVector Scale(1.0f, 1.0f, 1.0f);
+    if (Params->HasField(TEXT("location")))
+    {
+        Location = FUnrealMCPCommonUtils::GetVectorFromJson(Params, TEXT("location"));
+    }
+    if (Params->HasField(TEXT("rotation")))
+    {
+        Rotation = FUnrealMCPCommonUtils::GetRotatorFromJson(Params, TEXT("rotation"));
+    }
+    if (Params->HasField(TEXT("scale")))
+    {
+        Scale = FUnrealMCPCommonUtils::GetVectorFromJson(Params, TEXT("scale"));
+    }
+
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.Name = *ActorName;
+    AStaticMeshActor* NewActor = World->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), Location, Rotation, SpawnParams);
+    if (!NewActor)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to spawn static mesh actor"));
+    }
+
+    if (UStaticMeshComponent* MeshComponent = NewActor->GetStaticMeshComponent())
+    {
+        MeshComponent->SetStaticMesh(StaticMesh);
+    }
+
+    FTransform Transform = NewActor->GetTransform();
+    Transform.SetScale3D(Scale);
+    NewActor->SetActorTransform(Transform);
+
+#if WITH_EDITOR
+    NewActor->SetActorLabel(ActorName);
+#endif
+
+    return FUnrealMCPCommonUtils::ActorToJsonObject(NewActor, true);
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleFindActorsByPrefix(const FJsonObjectParameter& Params)
+{
+    FString Prefix;
+    if (!Params->TryGetStringField(TEXT("prefix"), Prefix))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'prefix' parameter"));
+    }
+
+    TArray<AActor*> AllActors;
+    GetAllEditorActors(AllActors);
+
+    TArray<TSharedPtr<FJsonValue>> MatchingActors;
+    for (AActor* Actor : AllActors)
+    {
+        if (ActorMatchesPrefix(Actor, Prefix))
+        {
+            MatchingActors.Add(FUnrealMCPCommonUtils::ActorToJson(Actor));
+        }
+    }
+
+    FJsonObjectParameter ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetBoolField(TEXT("success"), true);
+    ResultObj->SetStringField(TEXT("prefix"), Prefix);
+    ResultObj->SetNumberField(TEXT("count"), MatchingActors.Num());
+    ResultObj->SetArrayField(TEXT("actors"), MatchingActors);
+    return ResultObj;
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleDeleteActorsByPrefix(const FJsonObjectParameter& Params)
+{
+    FString Prefix;
+    if (!Params->TryGetStringField(TEXT("prefix"), Prefix))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'prefix' parameter"));
+    }
+
+    TArray<AActor*> AllActors;
+    GetAllEditorActors(AllActors);
+
+    TArray<TSharedPtr<FJsonValue>> DeletedActors;
+    for (AActor* Actor : AllActors)
+    {
+        if (!ActorMatchesPrefix(Actor, Prefix))
+        {
+            continue;
+        }
+
+        DeletedActors.Add(FUnrealMCPCommonUtils::ActorToJson(Actor));
+        Actor->Destroy();
+    }
+
+    FJsonObjectParameter ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetBoolField(TEXT("success"), true);
+    ResultObj->SetStringField(TEXT("prefix"), Prefix);
+    ResultObj->SetNumberField(TEXT("deleted_count"), DeletedActors.Num());
+    ResultObj->SetArrayField(TEXT("deleted_actors"), DeletedActors);
+    return ResultObj;
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleResetTestbed(const FJsonObjectParameter& Params)
+{
+    return HandleDeleteActorsByPrefix(Params);
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleEnsureCaptureCamera(const FJsonObjectParameter& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("name"), ActorName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'name' parameter"));
+    }
+
+    FVector Location(0.0f, 0.0f, 300.0f);
+    FRotator Rotation(-20.0f, 180.0f, 0.0f);
+    if (Params->HasField(TEXT("location")))
+    {
+        Location = FUnrealMCPCommonUtils::GetVectorFromJson(Params, TEXT("location"));
+    }
+    if (Params->HasField(TEXT("rotation")))
+    {
+        Rotation = FUnrealMCPCommonUtils::GetRotatorFromJson(Params, TEXT("rotation"));
+    }
+
+    UWorld* World = GetEditorWorldChecked();
+    if (!World)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    AActor* ExistingActor = FindActorByExactName(ActorName);
+    ACameraActor* CameraActor = Cast<ACameraActor>(ExistingActor);
+    if (!CameraActor && ExistingActor)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Actor exists but is not a camera: %s"), *ActorName));
+    }
+
+    if (!CameraActor)
+    {
+        FActorSpawnParameters SpawnParams;
+        SpawnParams.Name = *ActorName;
+        CameraActor = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), Location, Rotation, SpawnParams);
+        if (!CameraActor)
+        {
+            return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create capture camera"));
+        }
+    }
+
+    CameraActor->SetActorLocation(Location);
+    CameraActor->SetActorRotation(Rotation);
+
+#if WITH_EDITOR
+    CameraActor->SetActorLabel(ActorName);
+#endif
+
+    FJsonObjectParameter ResultObj = FUnrealMCPCommonUtils::ActorToJsonObject(CameraActor, true);
+    ResultObj->SetBoolField(TEXT("success"), true);
+    ResultObj->SetStringField(TEXT("action"), TEXT("ensure_capture_camera"));
+    return ResultObj;
 }
 
 FJsonObjectParameter UMCPEditorTools::ConvertObjectToJson(UObject* TargetObject)

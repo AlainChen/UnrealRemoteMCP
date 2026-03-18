@@ -333,6 +333,64 @@ def register_edit_tool( mcp:UnrealMCP):
         return call_cpp_tools(unreal.MCPEditorTools.handle_create_map_from_template, params)
 
     @mcp.domain_tool("level")
+    def spawn_static_mesh_actor(
+        ctx: Context,
+        name: str,
+        mesh_path: str,
+        location: List[float] = [0.0, 0.0, 0.0],
+        rotation: List[float] = [0.0, 0.0, 0.0],
+        scale: List[float] = [1.0, 1.0, 1.0],
+    ) -> Dict[str, Any]:
+        """Spawn a static mesh actor with a specific mesh asset."""
+        params = {
+            "name": name,
+            "mesh_path": mesh_path,
+            "location": location,
+            "rotation": rotation,
+            "scale": scale,
+        }
+        return call_cpp_tools(unreal.MCPEditorTools.handle_spawn_static_mesh_actor, params)
+
+    @mcp.domain_tool("level")
+    def find_actors_by_prefix(ctx: Context, prefix: str) -> Dict[str, Any]:
+        """Find actors whose name or label starts with a prefix."""
+        params = {
+            "prefix": prefix,
+        }
+        return call_cpp_tools(unreal.MCPEditorTools.handle_find_actors_by_prefix, params)
+
+    @mcp.domain_tool("level")
+    def delete_actors_by_prefix(ctx: Context, prefix: str) -> Dict[str, Any]:
+        """Delete actors whose name or label starts with a prefix."""
+        params = {
+            "prefix": prefix,
+        }
+        return call_cpp_tools(unreal.MCPEditorTools.handle_delete_actors_by_prefix, params)
+
+    @mcp.domain_tool("level")
+    def reset_testbed(ctx: Context, prefix: str) -> Dict[str, Any]:
+        """Reset a testbed by deleting actors under a prefix."""
+        params = {
+            "prefix": prefix,
+        }
+        return call_cpp_tools(unreal.MCPEditorTools.handle_reset_testbed, params)
+
+    @mcp.domain_tool("level")
+    def ensure_capture_camera(
+        ctx: Context,
+        name: str,
+        location: List[float] = [0.0, 0.0, 300.0],
+        rotation: List[float] = [-20.0, 180.0, 0.0],
+    ) -> Dict[str, Any]:
+        """Create or update a reusable capture camera."""
+        params = {
+            "name": name,
+            "location": location,
+            "rotation": rotation,
+        }
+        return call_cpp_tools(unreal.MCPEditorTools.handle_ensure_capture_camera, params)
+
+    @mcp.domain_tool("level")
     def set_actor_property(
         ctx: Context,
         name: str,

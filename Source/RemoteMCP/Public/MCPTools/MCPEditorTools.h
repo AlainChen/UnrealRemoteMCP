@@ -139,6 +139,46 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
 	static FJsonObjectParameter HandleCreateMapFromTemplate(const FJsonObjectParameter& Params);
 
+	/**
+	 * 创建带静态网格的Actor
+	 * @param Params - 输入参数，必须包含 "name" 和 "mesh_path" 字段
+	 * @return 包含创建结果的JSON对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleSpawnStaticMeshActor(const FJsonObjectParameter& Params);
+
+	/**
+	 * 按名称前缀查找Actor
+	 * @param Params - 输入参数，必须包含 "prefix" 字段
+	 * @return 包含匹配Actor数组的JSON对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleFindActorsByPrefix(const FJsonObjectParameter& Params);
+
+	/**
+	 * 按名称前缀删除Actor
+	 * @param Params - 输入参数，必须包含 "prefix" 字段
+	 * @return 包含删除结果的JSON对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleDeleteActorsByPrefix(const FJsonObjectParameter& Params);
+
+	/**
+	 * 重置测试场景(当前实现等价于按前缀删除)
+	 * @param Params - 输入参数，必须包含 "prefix" 字段
+	 * @return 包含重置结果的JSON对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleResetTestbed(const FJsonObjectParameter& Params);
+
+	/**
+	 * 创建或更新一个用于证据采集的相机
+	 * @param Params - 输入参数，必须包含 "name"，可选 location/rotation
+	 * @return 包含相机结果的JSON对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleEnsureCaptureCamera(const FJsonObjectParameter& Params);
+
 	
 	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
 	static FJsonObjectParameter ConvertObjectToJson(UObject* TargetObject);
