@@ -118,6 +118,14 @@ Those can later live in an outer control layer while this plugin focuses on edit
 - `save_current_map`
 - `save_map_as`
 
+These tools should be treated as two separate compatibility tiers:
+
+- `save_current_map`
+  - safe to call inside an existing MCP session
+- `load_map`, `create_blank_map`, `create_map_from_template`, `save_map_as`
+  - session-disrupting
+  - callers should expect the current MCP session to terminate and reconnect before continuing
+
 ### P0-B: Scene and testbed construction
 
 - `spawn_static_mesh_actor`
@@ -131,6 +139,8 @@ Those can later live in an outer control layer while this plugin focuses on edit
 - `set_editor_camera`
 - `capture_viewport`
 - `capture_before_after`
+
+The evidence-capture batch is intentionally lower risk than map lifecycle and should become the preferred baseline path for agent-driven showcase automation before revisiting seamless map transitions.
 
 These three areas form the minimum automation foundation.
 

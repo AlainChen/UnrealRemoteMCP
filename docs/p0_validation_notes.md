@@ -22,6 +22,11 @@ Current implemented batches:
   - `reset_testbed`
   - `ensure_capture_camera`
 
+- evidence capture
+  - `set_editor_camera`
+  - `capture_viewport`
+  - `capture_before_after`
+
 ## Validation Rule
 
 Each tool should be validated in three layers where possible:
@@ -107,12 +112,45 @@ The second chain is:
 3. `reset_testbed`
 4. `save_map_as`
 
-## Current Limitation
+## Runtime Validation Snapshot
 
-This repository work has not yet been runtime-validated inside Unreal on this machine.
+The first two P0 batches have now been runtime-validated inside Unreal 5.7 on this machine.
 
-So current status should be treated as:
+Confirmed working:
+
+- `create_blank_map`
+- `spawn_static_mesh_actor`
+- `ensure_capture_camera`
+- `find_actors_by_prefix`
+- `save_current_map`
+- `load_map` for the original validation map
+- `reset_testbed`
+- `save_map_as`
+- `set_editor_camera`
+- `capture_viewport`
+- `capture_before_after`
+
+Observed failure boundary:
+
+- after `save_map_as`, calling `load_map` on the duplicated map crashed the editor when the implementation still used deprecated `UEditorLevelLibrary` map lifecycle APIs
+- migrating to `ULevelEditorSubsystem` did not eliminate the crash
+- the practical boundary is now treated as a session-lifecycle problem rather than a single bad API call
+- map-changing operations should be treated as `session-disrupting` until the bridge lifecycle is redesigned
+
+Observed environment notes:
+
+- the plugin quickstart settings on the validation project are correct:
+  - `bEnable=True`
+  - `bAutoStart=True`
+  - `Port=8422`
+- Live Coding must be disabled before rebuilding the plugin externally
+- source-control checkout prompts can appear during map saves and should be disabled or accounted for during automated validation
+
+Current status should be treated as:
 
 - implemented
-- statically reviewed
-- awaiting editor-side validation
+- runtime-validated for the first practical chain
+- runtime-validated for most of the second chain
+- runtime-validated for the P0 evidence-capture batch
+- blocked on seamless map-transition support
+- ready to use evidence capture as the preferred low-risk baseline path

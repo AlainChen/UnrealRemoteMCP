@@ -54,6 +54,7 @@ public class RemoteMCP : ModuleRules
 				"UnrealEd",
 				"EditorScriptingUtilities",
 				"EditorSubsystem",
+				"LevelEditor",
 				"Slate",
 				"SlateCore",
 				"UMG",

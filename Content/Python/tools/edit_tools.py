@@ -292,7 +292,11 @@ def register_edit_tool( mcp:UnrealMCP):
 
     @mcp.domain_tool("level")
     def load_map(ctx: Context, map_path: str) -> Dict[str, Any]:
-        """Load a level by Unreal asset path, for example `/Game/Maps/TestMap`."""
+        """Load a level by Unreal asset path.
+
+        This is a session-disrupting operation. Callers should be prepared to
+        reconnect to MCP before issuing follow-up requests.
+        """
         params = {
             "map_path": map_path,
         }
@@ -305,7 +309,11 @@ def register_edit_tool( mcp:UnrealMCP):
 
     @mcp.domain_tool("level")
     def save_map_as(ctx: Context, target_map_path: str) -> Dict[str, Any]:
-        """Save the current map to a new Unreal asset path."""
+        """Save the current map to a new Unreal asset path.
+
+        This is a session-disrupting operation. Callers should be prepared to
+        reconnect to MCP before issuing follow-up requests.
+        """
         params = {
             "target_map_path": target_map_path,
         }
@@ -313,7 +321,11 @@ def register_edit_tool( mcp:UnrealMCP):
 
     @mcp.domain_tool("level")
     def create_blank_map(ctx: Context, map_path: str) -> Dict[str, Any]:
-        """Create a new blank level asset and load it."""
+        """Create a new blank level asset and load it.
+
+        This is a session-disrupting operation. Callers should be prepared to
+        reconnect to MCP before issuing follow-up requests.
+        """
         params = {
             "map_path": map_path,
         }
@@ -325,7 +337,11 @@ def register_edit_tool( mcp:UnrealMCP):
         map_path: str,
         template_map_path: str,
     ) -> Dict[str, Any]:
-        """Create a new level from a template map asset and load it."""
+        """Create a new level from a template map asset and load it.
+
+        This is a session-disrupting operation. Callers should be prepared to
+        reconnect to MCP before issuing follow-up requests.
+        """
         params = {
             "map_path": map_path,
             "template_map_path": template_map_path,
@@ -389,6 +405,111 @@ def register_edit_tool( mcp:UnrealMCP):
             "rotation": rotation,
         }
         return call_cpp_tools(unreal.MCPEditorTools.handle_ensure_capture_camera, params)
+
+    @mcp.domain_tool("level")
+    def set_editor_camera(
+        ctx: Context,
+        location: List[float],
+        orientation: List[float],
+        distance: float = 0.0,
+    ) -> Dict[str, Any]:
+        """Set the active editor viewport camera using an explicit location and orientation."""
+        params = {
+            "location": location,
+            "orientation": orientation,
+            "distance": distance,
+        }
+        return call_cpp_tools(unreal.MCPEditorTools.handle_focus_viewport, params)
+
+    @mcp.domain_tool("level")
+    def capture_viewport(ctx: Context, filepath: str) -> Dict[str, Any]:
+        """Capture the current active editor viewport to an image file."""
+        params = {
+            "filepath": filepath,
+        }
+        return call_cpp_tools(unreal.MCPEditorTools.handle_take_screenshot, params)
+
+    @mcp.domain_tool("level")
+    def capture_before_after(
+        ctx: Context,
+        before_path: str,
+        after_path: str,
+        before_location: Optional[List[float]] = None,
+        before_orientation: Optional[List[float]] = None,
+        after_location: Optional[List[float]] = None,
+        after_orientation: Optional[List[float]] = None,
+    ) -> Dict[str, Any]:
+        """Capture before/after viewport images using the active editor viewport.
+
+        This helper intentionally stays lightweight: it only moves the editor
+        camera when explicit transforms are provided, then captures each frame.
+        """
+        result: Dict[str, Any] = {
+            "success": True,
+            "captures": [],
+        }
+
+        if before_location is not None and before_orientation is not None:
+            before_result = call_cpp_tools(
+                unreal.MCPEditorTools.handle_focus_viewport,
+                {
+                    "location": before_location,
+                    "orientation": before_orientation,
+                    "distance": 0.0,
+                },
+            )
+            result["captures"].append({
+                "step": "before_focus",
+                "result": before_result,
+            })
+            if not before_result.get("success", True):
+                result["success"] = False
+                return result
+
+        before_capture = call_cpp_tools(
+            unreal.MCPEditorTools.handle_take_screenshot,
+            {"filepath": before_path},
+        )
+        result["captures"].append({
+            "step": "before_capture",
+            "result": before_capture,
+        })
+        if not before_capture.get("success", True):
+            result["success"] = False
+            return result
+
+        if after_location is not None and after_orientation is not None:
+            after_focus = call_cpp_tools(
+                unreal.MCPEditorTools.handle_focus_viewport,
+                {
+                    "location": after_location,
+                    "orientation": after_orientation,
+                    "distance": 0.0,
+                },
+            )
+            result["captures"].append({
+                "step": "after_focus",
+                "result": after_focus,
+            })
+            if not after_focus.get("success", True):
+                result["success"] = False
+                return result
+
+        after_capture = call_cpp_tools(
+            unreal.MCPEditorTools.handle_take_screenshot,
+            {"filepath": after_path},
+        )
+        result["captures"].append({
+            "step": "after_capture",
+            "result": after_capture,
+        })
+        if not after_capture.get("success", True):
+            result["success"] = False
+            return result
+
+        result["before_path"] = before_capture.get("filepath", before_path)
+        result["after_path"] = after_capture.get("filepath", after_path)
+        return result
 
     @mcp.domain_tool("level")
     def set_actor_property(

@@ -79,6 +79,8 @@ The current pain points are mostly about stability and structure:
 - lighting, capture, and post-process flows are still brittle
 - tool result contracts are not yet consistent enough for robust automation
 
+One important current limitation is that map-changing operations are not yet seamless inside a single MCP session. Until the bridge lifecycle is redesigned, callers should treat those tools as session-disrupting and reconnect before issuing follow-up requests.
+
 ## P0 Foundation Priorities
 
 The first priority is not "more tools everywhere".
@@ -93,6 +95,10 @@ It is to add a small, stable foundation layer for automation.
   - `load_map`
   - `save_current_map`
   - `save_map_as`
+
+  Compatibility note:
+  - `save_current_map` is expected to remain safe inside an active session
+  - the other map lifecycle tools should currently be treated as session-disrupting
 
 - scene and testbed construction
   - `spawn_static_mesh_actor`
