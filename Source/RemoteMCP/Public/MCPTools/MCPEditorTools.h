@@ -99,6 +99,46 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
 	static FJsonObjectParameter HandleTakeScreenshot(const FJsonObjectParameter& Params);
 
+	/**
+	 * 加载指定资产路径的关卡
+	 * @param Params - 输入参数，必须包含 "map_path" 字段
+	 * @return 包含加载结果的 JSON 对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleLoadMap(const FJsonObjectParameter& Params);
+
+	/**
+	 * 保存当前编辑器中活动关卡
+	 * @param Params - 输入参数(不需要特定字段)
+	 * @return 包含保存结果的 JSON 对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleSaveCurrentMap(const FJsonObjectParameter& Params);
+
+	/**
+	 * 将当前活动关卡另存为新的资产路径
+	 * @param Params - 输入参数，必须包含 "target_map_path" 字段
+	 * @return 包含另存为结果的 JSON 对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleSaveMapAs(const FJsonObjectParameter& Params);
+
+	/**
+	 * 创建一张新的空白关卡
+	 * @param Params - 输入参数，必须包含 "map_path" 字段
+	 * @return 包含创建结果的 JSON 对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleCreateBlankMap(const FJsonObjectParameter& Params);
+
+	/**
+	 * 从模板创建一张新关卡
+	 * @param Params - 输入参数，必须包含 "map_path" 和 "template_map_path" 字段
+	 * @return 包含创建结果的 JSON 对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleCreateMapFromTemplate(const FJsonObjectParameter& Params);
+
 	
 	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
 	static FJsonObjectParameter ConvertObjectToJson(UObject* TargetObject);

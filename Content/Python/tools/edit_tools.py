@@ -289,6 +289,49 @@ def register_edit_tool( mcp:UnrealMCP):
             "name": name,
         }
         return call_cpp_tools(unreal.MCPEditorTools.handle_get_actor_properties, params)
+
+    @mcp.domain_tool("level")
+    def load_map(ctx: Context, map_path: str) -> Dict[str, Any]:
+        """Load a level by Unreal asset path, for example `/Game/Maps/TestMap`."""
+        params = {
+            "map_path": map_path,
+        }
+        return call_cpp_tools(unreal.MCPEditorTools.handle_load_map, params)
+
+    @mcp.domain_tool("level")
+    def save_current_map(ctx: Context) -> Dict[str, Any]:
+        """Save the currently active editor level."""
+        return call_cpp_tools(unreal.MCPEditorTools.handle_save_current_map, {})
+
+    @mcp.domain_tool("level")
+    def save_map_as(ctx: Context, target_map_path: str) -> Dict[str, Any]:
+        """Save the current map to a new Unreal asset path."""
+        params = {
+            "target_map_path": target_map_path,
+        }
+        return call_cpp_tools(unreal.MCPEditorTools.handle_save_map_as, params)
+
+    @mcp.domain_tool("level")
+    def create_blank_map(ctx: Context, map_path: str) -> Dict[str, Any]:
+        """Create a new blank level asset and load it."""
+        params = {
+            "map_path": map_path,
+        }
+        return call_cpp_tools(unreal.MCPEditorTools.handle_create_blank_map, params)
+
+    @mcp.domain_tool("level")
+    def create_map_from_template(
+        ctx: Context,
+        map_path: str,
+        template_map_path: str,
+    ) -> Dict[str, Any]:
+        """Create a new level from a template map asset and load it."""
+        params = {
+            "map_path": map_path,
+            "template_map_path": template_map_path,
+        }
+        return call_cpp_tools(unreal.MCPEditorTools.handle_create_map_from_template, params)
+
     @mcp.domain_tool("level")
     def set_actor_property(
         ctx: Context,

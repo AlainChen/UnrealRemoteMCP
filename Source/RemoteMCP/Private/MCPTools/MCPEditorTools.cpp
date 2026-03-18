@@ -30,7 +30,43 @@
 #include "BehaviorTreeFactory.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "EditorAssetLibrary.h"
+#include "EditorLevelLibrary.h"
 #include "JsonObjectConverter.h"
+#include "Misc/PackageName.h"
+
+namespace
+{
+    FString NormalizeMapAssetPath(const FString& InPath)
+    {
+        FString Path = InPath;
+        Path.TrimStartAndEndInline();
+
+        if (Path.EndsWith(TEXT(".umap")))
+        {
+            Path.LeftChopInline(5, EAllowShrinking::No);
+        }
+
+        if (!Path.StartsWith(TEXT("/")))
+        {
+            Path = FString::Printf(TEXT("/Game/%s"), *Path);
+        }
+
+        return Path;
+    }
+
+    FJsonObjectParameter CreateMapLifecycleSuccess(
+        const FString& Action,
+        const FString& MapPath,
+        bool bLoaded = false)
+    {
+        FJsonObjectParameter ResultObj = MakeShared<FJsonObject>();
+        ResultObj->SetBoolField(TEXT("success"), true);
+        ResultObj->SetStringField(TEXT("action"), Action);
+        ResultObj->SetStringField(TEXT("map_path"), MapPath);
+        ResultObj->SetBoolField(TEXT("loaded"), bLoaded);
+        return ResultObj;
+    }
+}
 
 
 /**
@@ -600,6 +636,161 @@ FJsonObjectParameter UMCPEditorTools::HandleTakeScreenshot(const FJsonObjectPara
     }
 
     return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to take screenshot"));
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleLoadMap(const FJsonObjectParameter& Params)
+{
+    FString MapPath;
+    if (!Params->TryGetStringField(TEXT("map_path"), MapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'map_path' parameter"));
+    }
+
+    const FString NormalizedMapPath = NormalizeMapAssetPath(MapPath);
+    if (!UEditorAssetLibrary::DoesAssetExist(NormalizedMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Map asset not found: %s"), *NormalizedMapPath));
+    }
+
+    if (!UEditorLevelLibrary::LoadLevel(NormalizedMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Failed to load map: %s"), *NormalizedMapPath));
+    }
+
+    return CreateMapLifecycleSuccess(TEXT("load_map"), NormalizedMapPath, true);
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleSaveCurrentMap(const FJsonObjectParameter& Params)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    const FString CurrentMapPath = World->GetPackage() ? World->GetPackage()->GetName() : TEXT("");
+    if (CurrentMapPath.IsEmpty())
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Current map path is empty"));
+    }
+
+    if (!UEditorLevelLibrary::SaveCurrentLevel())
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Failed to save current map: %s"), *CurrentMapPath));
+    }
+
+    return CreateMapLifecycleSuccess(TEXT("save_current_map"), CurrentMapPath, false);
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleSaveMapAs(const FJsonObjectParameter& Params)
+{
+    FString TargetMapPath;
+    if (!Params->TryGetStringField(TEXT("target_map_path"), TargetMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'target_map_path' parameter"));
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    const FString CurrentMapPath = World->GetPackage() ? World->GetPackage()->GetName() : TEXT("");
+    if (CurrentMapPath.IsEmpty())
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Current map path is empty"));
+    }
+
+    const FString NormalizedTargetMapPath = NormalizeMapAssetPath(TargetMapPath);
+    if (CurrentMapPath == NormalizedTargetMapPath)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Target map path must differ from current map"));
+    }
+
+    if (!UEditorLevelLibrary::SaveCurrentLevel())
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Failed to save current map before save-as: %s"), *CurrentMapPath));
+    }
+
+    if (UEditorAssetLibrary::DoesAssetExist(NormalizedTargetMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Target map already exists: %s"), *NormalizedTargetMapPath));
+    }
+
+    if (!UEditorAssetLibrary::DuplicateAsset(CurrentMapPath, NormalizedTargetMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Failed to duplicate map from %s to %s"), *CurrentMapPath, *NormalizedTargetMapPath));
+    }
+
+    return CreateMapLifecycleSuccess(TEXT("save_map_as"), NormalizedTargetMapPath, false);
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleCreateBlankMap(const FJsonObjectParameter& Params)
+{
+    FString MapPath;
+    if (!Params->TryGetStringField(TEXT("map_path"), MapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'map_path' parameter"));
+    }
+
+    const FString NormalizedMapPath = NormalizeMapAssetPath(MapPath);
+    if (UEditorAssetLibrary::DoesAssetExist(NormalizedMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Map already exists: %s"), *NormalizedMapPath));
+    }
+
+    if (!UEditorLevelLibrary::NewLevel(NormalizedMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Failed to create blank map: %s"), *NormalizedMapPath));
+    }
+
+    return CreateMapLifecycleSuccess(TEXT("create_blank_map"), NormalizedMapPath, true);
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleCreateMapFromTemplate(const FJsonObjectParameter& Params)
+{
+    FString MapPath;
+    FString TemplateMapPath;
+    if (!Params->TryGetStringField(TEXT("map_path"), MapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'map_path' parameter"));
+    }
+    if (!Params->TryGetStringField(TEXT("template_map_path"), TemplateMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'template_map_path' parameter"));
+    }
+
+    const FString NormalizedMapPath = NormalizeMapAssetPath(MapPath);
+    const FString NormalizedTemplateMapPath = NormalizeMapAssetPath(TemplateMapPath);
+
+    if (UEditorAssetLibrary::DoesAssetExist(NormalizedMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Map already exists: %s"), *NormalizedMapPath));
+    }
+
+    if (!UEditorAssetLibrary::DoesAssetExist(NormalizedTemplateMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Template map not found: %s"), *NormalizedTemplateMapPath));
+    }
+
+    if (!UEditorLevelLibrary::NewLevelFromTemplate(NormalizedMapPath, NormalizedTemplateMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Failed to create map from template %s"), *NormalizedTemplateMapPath));
+    }
+
+    return CreateMapLifecycleSuccess(TEXT("create_map_from_template"), NormalizedMapPath, true);
 }
 
 FJsonObjectParameter UMCPEditorTools::ConvertObjectToJson(UObject* TargetObject)
