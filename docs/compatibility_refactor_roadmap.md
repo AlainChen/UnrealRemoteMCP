@@ -242,6 +242,14 @@ Current status:
 - schema-level missing-argument failures can still be raised by FastMCP /
   Pydantic before control reaches the wrapper layer
 
+Decision:
+
+- keep schema-level argument validation in FastMCP / Pydantic
+- do not weaken tool signatures just to normalize every missing-argument case
+- continue using plugin-side normalization for business and lifecycle errors
+- if full cross-client error translation is needed later, prefer doing it in an
+  outer orchestration layer rather than inside every plugin tool
+
 ### P0.5-B: Contract normalization for existing P0 tools
 
 The current P0 tools still mix:
@@ -266,6 +274,14 @@ P0.5 should normalize them toward a single shape such as:
 ```
 
 This does not have to replace every legacy return path immediately, but new and upgraded P0 tools should converge on it.
+
+Argument-validation note:
+
+- schema-level parameter failures are currently allowed to remain outside this
+  wrapper contract
+- P0.5 should prioritize business-error normalization first
+- missing-argument translation can be revisited later only if cross-client
+  ergonomics clearly justify an outer translation layer
 
 ## P1 Roadmap
 

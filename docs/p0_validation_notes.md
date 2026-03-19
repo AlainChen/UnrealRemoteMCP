@@ -192,6 +192,15 @@ Confirmed contract behavior:
 - missing required parameters currently fail at the FastMCP / Pydantic schema
   layer before the wrapper can normalize them into `invalid_arguments`
 
+Current decision:
+
+- keep missing-argument and type-validation failures at the FastMCP / Pydantic
+  schema layer for now
+- do not relax tool signatures only to force those failures through the plugin
+  wrapper
+- focus plugin-side normalization on business errors, lifecycle errors, and
+  reconnect semantics
+
 Observed failure boundary:
 
 - the original implementation could crash the editor after `save_map_as -> load_map(copy)`
