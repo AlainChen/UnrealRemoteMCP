@@ -192,7 +192,8 @@ For agent-facing structured tools, the minimum operational semantics should incl
 - `recommended_client_action`
 
 See:
-- `docs/tool_tiering_model.md`
+- `docs/agent_workflow_design_principles.md`
+- `docs/p1_camera_capture_foundation.md`
 
 ## P0 Foundation Priorities
 

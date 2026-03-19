@@ -2,7 +2,6 @@
 
 
 #include "MCPTools/MCPEditorTools.h"
-#include "MCPTools/MCPEditorTools.h"
 #include "MCPTools/UnrealMCPCommonUtils.h"
 #include "Editor.h"
 #include "EditorViewportClient.h"
@@ -26,6 +25,7 @@
 #include "Components/DirectionalLightComponent.h"
 #include "Components/SkyLightComponent.h"
 #include "Components/ExponentialHeightFogComponent.h"
+#include "Components/SkyAtmosphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "EditorSubsystem.h"
 #include "Subsystems/EditorActorSubsystem.h"
@@ -94,6 +94,54 @@ namespace
         return GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     }
 
+    FLevelEditorViewportClient* GetPreferredLevelViewportClient()
+    {
+        if (!GEditor)
+        {
+            return nullptr;
+        }
+
+        if (FViewport* ActiveViewport = GEditor->GetActiveViewport())
+        {
+            for (FLevelEditorViewportClient* ViewportClient : GEditor->GetLevelViewportClients())
+            {
+                if (ViewportClient && ViewportClient->Viewport == ActiveViewport && ViewportClient->ViewportType == LVT_Perspective)
+                {
+                    return ViewportClient;
+                }
+            }
+        }
+
+        for (FLevelEditorViewportClient* ViewportClient : GEditor->GetLevelViewportClients())
+        {
+            if (ViewportClient && ViewportClient->Viewport && ViewportClient->ViewportType == LVT_Perspective)
+            {
+                return ViewportClient;
+            }
+        }
+
+        return nullptr;
+    }
+
+    void ForceLevelViewportRefresh()
+    {
+        if (!GEditor)
+        {
+            return;
+        }
+
+        GEditor->RedrawLevelEditingViewports(true);
+
+        if (FLevelEditorViewportClient* ViewportClient = GetPreferredLevelViewportClient())
+        {
+            ViewportClient->Invalidate();
+            if (ViewportClient->Viewport)
+            {
+                ViewportClient->Viewport->Draw();
+            }
+        }
+    }
+
     void ScheduleSessionDisruptingMapAction(TFunction<void()> Action)
     {
         FTSTicker::GetCoreTicker().AddTicker(
@@ -128,10 +176,22 @@ namespace
         GetAllEditorActors(AllActors);
         for (AActor* Actor : AllActors)
         {
-            if (Actor && Actor->GetName() == ActorName)
+            if (!Actor)
+            {
+                continue;
+            }
+
+            if (Actor->GetName() == ActorName)
             {
                 return Actor;
             }
+
+#if WITH_EDITOR
+            if (Actor->GetActorLabel() == ActorName)
+            {
+                return Actor;
+            }
+#endif
         }
         return nullptr;
     }
@@ -465,6 +525,7 @@ FJsonObjectParameter UMCPEditorTools::HandleSetActorTransform(const FJsonObjectP
 
     // 设置新的变换
     TargetActor->SetActorTransform(NewTransform);
+    ForceLevelViewportRefresh();
 
     // 返回更新后的Actor信息
     return FUnrealMCPCommonUtils::ActorToJsonObject(TargetActor, true);
@@ -681,11 +742,15 @@ FJsonObjectParameter UMCPEditorTools::HandleFocusViewport(const FJsonObjectParam
     }
 
     // 获取活动视口
-    FLevelEditorViewportClient* ViewportClient = (FLevelEditorViewportClient*)GEditor->GetActiveViewport()->GetClient();
+    FLevelEditorViewportClient* ViewportClient = GetPreferredLevelViewportClient();
     if (!ViewportClient)
     {
         return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get active viewport"));
     }
+
+    ViewportClient->SetViewportType(LVT_Perspective);
+    ViewportClient->SetViewMode(VMI_Lit);
+    ViewportClient->SetRealtime(true);
 
     // 如果有目标Actor，聚焦到它
     if (HasTargetActor)
@@ -729,7 +794,7 @@ FJsonObjectParameter UMCPEditorTools::HandleFocusViewport(const FJsonObjectParam
     }
 
     // 强制视口重绘
-    ViewportClient->Invalidate();
+    ForceLevelViewportRefresh();
 
     // 返回成功结果
     FJsonObjectParameter ResultObj = MakeShared<FJsonObject>();
@@ -756,10 +821,36 @@ FJsonObjectParameter UMCPEditorTools::HandleTakeScreenshot(const FJsonObjectPara
         FilePath += TEXT(".png");
     }
 
+    FString CameraName;
+    Params->TryGetStringField(TEXT("camera_name"), CameraName);
+
     // 获取活动视口
-    if (GEditor && GEditor->GetActiveViewport())
+    if (FLevelEditorViewportClient* ViewportClient = GetPreferredLevelViewportClient())
     {
-        FViewport* Viewport = GEditor->GetActiveViewport();
+        if (!CameraName.IsEmpty())
+        {
+            if (ACameraActor* CameraActor = Cast<ACameraActor>(FindActorByExactName(CameraName)))
+            {
+                ViewportClient->SetViewportType(LVT_Perspective);
+                ViewportClient->SetViewMode(VMI_Lit);
+                ViewportClient->SetRealtime(true);
+                ViewportClient->SetActorLock(CameraActor);
+                ViewportClient->SetViewLocation(CameraActor->GetActorLocation());
+                ViewportClient->SetViewRotation(CameraActor->GetActorRotation());
+                ForceLevelViewportRefresh();
+            }
+            else
+            {
+                return FUnrealMCPCommonUtils::CreateErrorResponse(
+                    FString::Printf(TEXT("Capture camera not found: %s"), *CameraName));
+            }
+        }
+
+        FViewport* Viewport = ViewportClient->Viewport;
+        if (!Viewport)
+        {
+            return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Preferred viewport is invalid"));
+        }
         TArray<FColor> Bitmap;
         FIntRect ViewportRect(0, 0, Viewport->GetSizeXY().X, Viewport->GetSizeXY().Y);
 
@@ -1018,6 +1109,8 @@ FJsonObjectParameter UMCPEditorTools::HandleSpawnStaticMeshActor(const FJsonObje
     NewActor->SetActorLabel(ActorName);
 #endif
 
+    ForceLevelViewportRefresh();
+
     return FUnrealMCPCommonUtils::ActorToJsonObject(NewActor, true);
 }
 
@@ -1121,7 +1214,6 @@ FJsonObjectParameter UMCPEditorTools::HandleEnsureCaptureCamera(const FJsonObjec
     if (!CameraActor)
     {
         FActorSpawnParameters SpawnParams;
-        SpawnParams.Name = *ActorName;
         CameraActor = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), Location, Rotation, SpawnParams);
         if (!CameraActor)
         {
@@ -1135,6 +1227,8 @@ FJsonObjectParameter UMCPEditorTools::HandleEnsureCaptureCamera(const FJsonObjec
 #if WITH_EDITOR
     CameraActor->SetActorLabel(ActorName);
 #endif
+
+    ForceLevelViewportRefresh();
 
     FJsonObjectParameter ResultObj = FUnrealMCPCommonUtils::ActorToJsonObject(CameraActor, true);
     ResultObj->SetBoolField(TEXT("success"), true);
@@ -1153,6 +1247,7 @@ FJsonObjectParameter UMCPEditorTools::HandleFindLightingRig(const FJsonObjectPar
     ADirectionalLight* DirectionalLight = FindFirstActorOfClass<ADirectionalLight>(World);
     ASkyLight* SkyLight = FindFirstActorOfClass<ASkyLight>(World);
     AExponentialHeightFog* HeightFog = FindFirstActorOfClass<AExponentialHeightFog>(World);
+    ASkyAtmosphere* SkyAtmosphere = FindFirstActorOfClass<ASkyAtmosphere>(World);
 
     FJsonObjectParameter ResultObj = MakeShared<FJsonObject>();
     ResultObj->SetBoolField(TEXT("success"), true);
@@ -1160,6 +1255,7 @@ FJsonObjectParameter UMCPEditorTools::HandleFindLightingRig(const FJsonObjectPar
     ResultObj->SetBoolField(TEXT("has_directional_light"), DirectionalLight != nullptr);
     ResultObj->SetBoolField(TEXT("has_sky_light"), SkyLight != nullptr);
     ResultObj->SetBoolField(TEXT("has_exponential_height_fog"), HeightFog != nullptr);
+    ResultObj->SetBoolField(TEXT("has_sky_atmosphere"), SkyAtmosphere != nullptr);
 
     if (DirectionalLight)
     {
@@ -1172,6 +1268,10 @@ FJsonObjectParameter UMCPEditorTools::HandleFindLightingRig(const FJsonObjectPar
     if (HeightFog)
     {
         ResultObj->SetObjectField(TEXT("exponential_height_fog"), MakeActorSummary(HeightFog));
+    }
+    if (SkyAtmosphere)
+    {
+        ResultObj->SetObjectField(TEXT("sky_atmosphere"), MakeActorSummary(SkyAtmosphere));
     }
 
     return ResultObj;
@@ -1191,13 +1291,16 @@ FJsonObjectParameter UMCPEditorTools::HandleEnsureBasicLightingRig(const FJsonOb
     FString DirectionalLightName = Prefix + TEXT("_DirectionalLight");
     FString SkyLightName = Prefix + TEXT("_SkyLight");
     FString FogName = Prefix + TEXT("_ExponentialHeightFog");
+    FString SkyAtmosphereName = Prefix + TEXT("_SkyAtmosphere");
     Params->TryGetStringField(TEXT("directional_light_name"), DirectionalLightName);
     Params->TryGetStringField(TEXT("sky_light_name"), SkyLightName);
     Params->TryGetStringField(TEXT("fog_name"), FogName);
+    Params->TryGetStringField(TEXT("sky_atmosphere_name"), SkyAtmosphereName);
 
     ADirectionalLight* DirectionalLight = Cast<ADirectionalLight>(FindActorByExactName(DirectionalLightName));
     ASkyLight* SkyLight = Cast<ASkyLight>(FindActorByExactName(SkyLightName));
     AExponentialHeightFog* HeightFog = Cast<AExponentialHeightFog>(FindActorByExactName(FogName));
+    ASkyAtmosphere* SkyAtmosphere = Cast<ASkyAtmosphere>(FindActorByExactName(SkyAtmosphereName));
 
     if (!DirectionalLight)
     {
@@ -1215,6 +1318,12 @@ FJsonObjectParameter UMCPEditorTools::HandleEnsureBasicLightingRig(const FJsonOb
 #if WITH_EDITOR
         DirectionalLight->SetActorLabel(DirectionalLightName);
 #endif
+    }
+
+    if (UDirectionalLightComponent* DirectionalLightComponent = Cast<UDirectionalLightComponent>(DirectionalLight->GetLightComponent()))
+    {
+        DirectionalLightComponent->bAtmosphereSunLight = true;
+        DirectionalLightComponent->AtmosphereSunLightIndex = 0;
     }
 
     if (!SkyLight)
@@ -1253,12 +1362,31 @@ FJsonObjectParameter UMCPEditorTools::HandleEnsureBasicLightingRig(const FJsonOb
 #endif
     }
 
+    if (!SkyAtmosphere)
+    {
+        FActorSpawnParameters SpawnParams;
+        SpawnParams.Name = *SkyAtmosphereName;
+        SkyAtmosphere = World->SpawnActor<ASkyAtmosphere>(
+            ASkyAtmosphere::StaticClass(),
+            FVector::ZeroVector,
+            FRotator::ZeroRotator,
+            SpawnParams);
+        if (!SkyAtmosphere)
+        {
+            return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create sky atmosphere"));
+        }
+#if WITH_EDITOR
+        SkyAtmosphere->SetActorLabel(SkyAtmosphereName);
+#endif
+    }
+
     FJsonObjectParameter ResultObj = MakeShared<FJsonObject>();
     ResultObj->SetBoolField(TEXT("success"), true);
     ResultObj->SetStringField(TEXT("action"), TEXT("ensure_basic_lighting_rig"));
     ResultObj->SetObjectField(TEXT("directional_light"), MakeActorSummary(DirectionalLight));
     ResultObj->SetObjectField(TEXT("sky_light"), MakeActorSummary(SkyLight));
     ResultObj->SetObjectField(TEXT("exponential_height_fog"), MakeActorSummary(HeightFog));
+    ResultObj->SetObjectField(TEXT("sky_atmosphere"), MakeActorSummary(SkyAtmosphere));
     return ResultObj;
 }
 
@@ -1310,6 +1438,7 @@ FJsonObjectParameter UMCPEditorTools::HandleSetDirectionalLight(const FJsonObjec
     }
 
     LightComponent->MarkRenderStateDirty();
+    ForceLevelViewportRefresh();
 
     FJsonObjectParameter ResultObj = FUnrealMCPCommonUtils::ActorToJsonObject(LightActor, true);
     ResultObj->SetBoolField(TEXT("success"), true);
@@ -1347,7 +1476,9 @@ FJsonObjectParameter UMCPEditorTools::HandleSetSkyLight(const FJsonObjectParamet
         LightComponent->SetLightColor(ParseLinearColorFromJson(Params, TEXT("light_color"), FLinearColor::White));
     }
 
+    LightComponent->RecaptureSky();
     LightComponent->MarkRenderStateDirty();
+    ForceLevelViewportRefresh();
 
     FJsonObjectParameter ResultObj = FUnrealMCPCommonUtils::ActorToJsonObject(LightActor, true);
     ResultObj->SetBoolField(TEXT("success"), true);
@@ -1397,6 +1528,7 @@ FJsonObjectParameter UMCPEditorTools::HandleSetExponentialHeightFog(const FJsonO
     }
 
     FogComponent->MarkRenderStateDirty();
+    ForceLevelViewportRefresh();
 
     FJsonObjectParameter ResultObj = FUnrealMCPCommonUtils::ActorToJsonObject(FogActor, true);
     ResultObj->SetBoolField(TEXT("success"), true);

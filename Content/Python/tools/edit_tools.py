@@ -679,11 +679,17 @@ def register_edit_tool( mcp:UnrealMCP):
         )
 
     @mcp.domain_tool("level")
-    def capture_viewport(ctx: Context, filepath: str) -> Dict[str, Any]:
-        """Capture the current active editor viewport to an image file."""
+    def capture_viewport(ctx: Context, filepath: str, camera_name: Optional[str] = None) -> Dict[str, Any]:
+        """Capture the current editor viewport to an image file.
+
+        When ``camera_name`` is provided, the level viewport is first aligned
+        to that capture camera before the screenshot is taken.
+        """
         params = {
             "filepath": filepath,
         }
+        if camera_name is not None:
+            params["camera_name"] = camera_name
         return normalize_agent_result(
             call_cpp_tools(unreal.MCPEditorTools.handle_take_screenshot, params),
             default_message="Viewport captured.",
