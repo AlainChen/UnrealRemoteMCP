@@ -95,6 +95,11 @@ void UMCPSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	// });
 }
 
+void UMCPSubsystem::Deinitialize()
+{
+	Super::Deinitialize();
+}
+
 void UMCPSubsystem::PostCDOCompiled(const FPostCDOCompiledContext& Context)
 {
 	Super::PostCDOCompiled(Context);
@@ -131,7 +136,6 @@ void UMCPSubsystem::StartMCP()
 	{
 		RunTread = Async(EAsyncExecution::Thread, [this]()
 		{
-			// Your code to start the MCP goes here
 			try
 			{
 				MCPContext.Bridge.Execute(EMCPBridgeFuncType::Start, TEXT("MCP Start"));
@@ -165,6 +169,26 @@ void UMCPSubsystem::StopMCP()
 	}
 
 	//ClearObject();
+}
+
+void UMCPSubsystem::ClearContextForSessionTransition()
+{
+	if (MCPContext.IsRunning())
+	{
+		StopMCP();
+	}
+
+	ClearObject();
+}
+
+void UMCPSubsystem::ScheduleRestartAfterTransition(int32 DelayFrames)
+{
+	// Intentionally no-op for now. Map-changing tools should be treated as
+	// session-disrupting, and the external client is responsible for reconnecting.
+}
+
+void UMCPSubsystem::HandleMapOpened(const FString& Filename, bool bAsTemplate)
+{
 }
 
 EMCPServerState UMCPSubsystem::GetMCPServeState() const

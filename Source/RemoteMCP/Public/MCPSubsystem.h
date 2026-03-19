@@ -48,6 +48,7 @@ public:
 	void SetupBridge();
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
 	virtual void PostCDOCompiled(const FPostCDOCompiledContext& Context) override;
 	
 	UFUNCTION(BlueprintCallable ,Category="MCPLibrary|RemoteMCP")
@@ -58,6 +59,10 @@ public:
 	void Reload();
 	UFUNCTION(BlueprintCallable ,Category="MCPLibrary|RemoteMCP")
 	void StopMCP() ;
+	UFUNCTION(BlueprintCallable, Category="MCPLibrary|RemoteMCP")
+	void ClearContextForSessionTransition();
+	UFUNCTION(BlueprintCallable, Category="MCPLibrary|RemoteMCP")
+	void ScheduleRestartAfterTransition(int32 DelayFrames = 60);
 
 	UFUNCTION(BlueprintCallable ,Category="MCPLibrary|RemoteMCP")
 	EMCPServerState GetMCPServeState() const;
@@ -66,6 +71,7 @@ private:
 	void SetupObject(FMCPObject Context);
 	UFUNCTION(BlueprintCallable,Category="MCPLibrary|RemoteMCP")
 	void ClearObject();
+	void HandleMapOpened(const FString& Filename, bool bAsTemplate);
 private:
 	//UPROPERTY()
 	inline static FMCPObject MCPContext;

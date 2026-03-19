@@ -15,6 +15,7 @@
 #include "Engine/Selection.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/StaticMeshActor.h"
+#include "Engine/StaticMesh.h"
 #include "Engine/DirectionalLight.h"
 #include "Engine/PointLight.h"
 #include "Engine/SpotLight.h"
@@ -30,7 +31,127 @@
 #include "BehaviorTreeFactory.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "EditorAssetLibrary.h"
+#include "EditorLevelLibrary.h"
+#include "FileHelpers.h"
 #include "JsonObjectConverter.h"
+#include "Misc/PackageName.h"
+#include "Containers/Ticker.h"
+#include "MCPSubsystem.h"
+
+namespace
+{
+    FString NormalizeMapAssetPath(const FString& InPath)
+    {
+        FString Path = InPath;
+        Path.TrimStartAndEndInline();
+
+        if (Path.EndsWith(TEXT(".umap")))
+        {
+            Path.LeftChopInline(5, EAllowShrinking::No);
+        }
+
+        if (!Path.StartsWith(TEXT("/")))
+        {
+            Path = FString::Printf(TEXT("/Game/%s"), *Path);
+        }
+
+        return Path;
+    }
+
+    FJsonObjectParameter CreateMapLifecycleSuccess(
+        const FString& Action,
+        const FString& MapPath,
+        bool bLoaded = false,
+        bool bSessionDisrupted = false)
+    {
+        FJsonObjectParameter ResultObj = MakeShared<FJsonObject>();
+        ResultObj->SetBoolField(TEXT("success"), true);
+        ResultObj->SetStringField(TEXT("action"), Action);
+        ResultObj->SetStringField(TEXT("map_path"), MapPath);
+        ResultObj->SetBoolField(TEXT("loaded"), bLoaded);
+        ResultObj->SetBoolField(TEXT("session_disrupted"), bSessionDisrupted);
+        ResultObj->SetBoolField(TEXT("reconnect_required"), bSessionDisrupted);
+        ResultObj->SetStringField(
+            TEXT("risk_tier"),
+            bSessionDisrupted ? TEXT("session-disrupting") : TEXT("safe"));
+        if (bSessionDisrupted)
+        {
+            ResultObj->SetStringField(
+                TEXT("restart_hint"),
+                TEXT("Map lifecycle operations may restart or invalidate the current MCP session. Reconnect before issuing follow-up calls."));
+        }
+        return ResultObj;
+    }
+
+    UWorld* GetEditorWorldChecked()
+    {
+        return GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    }
+
+    void ScheduleSessionDisruptingMapAction(TFunction<void()> Action)
+    {
+        FTSTicker::GetCoreTicker().AddTicker(
+            FTickerDelegate::CreateLambda([Action = MoveTemp(Action)](float)
+            {
+                if (UMCPSubsystem* Subsystem = UMCPSubsystem::Get())
+                {
+                    Subsystem->ClearContextForSessionTransition();
+                    Subsystem->ScheduleRestartAfterTransition();
+                }
+
+                Action();
+                return false;
+            }),
+            0.0f);
+    }
+
+    void GetAllEditorActors(TArray<AActor*>& OutActors)
+    {
+        OutActors.Reset();
+        UWorld* World = GetEditorWorldChecked();
+        if (!World)
+        {
+            return;
+        }
+        UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), OutActors);
+    }
+
+    AActor* FindActorByExactName(const FString& ActorName)
+    {
+        TArray<AActor*> AllActors;
+        GetAllEditorActors(AllActors);
+        for (AActor* Actor : AllActors)
+        {
+            if (Actor && Actor->GetName() == ActorName)
+            {
+                return Actor;
+            }
+        }
+        return nullptr;
+    }
+
+    bool ActorMatchesPrefix(AActor* Actor, const FString& Prefix)
+    {
+        if (!Actor)
+        {
+            return false;
+        }
+
+        if (Actor->GetName().StartsWith(Prefix))
+        {
+            return true;
+        }
+
+#if WITH_EDITOR
+        if (Actor->GetActorLabel().StartsWith(Prefix))
+        {
+            return true;
+        }
+#endif
+
+        return false;
+    }
+}
 
 
 /**
@@ -600,6 +721,365 @@ FJsonObjectParameter UMCPEditorTools::HandleTakeScreenshot(const FJsonObjectPara
     }
 
     return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to take screenshot"));
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleLoadMap(const FJsonObjectParameter& Params)
+{
+    FString MapPath;
+    if (!Params->TryGetStringField(TEXT("map_path"), MapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'map_path' parameter"));
+    }
+
+    const FString NormalizedMapPath = NormalizeMapAssetPath(MapPath);
+    if (!UEditorAssetLibrary::DoesAssetExist(NormalizedMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Map asset not found: %s"), *NormalizedMapPath));
+    }
+
+    if (UWorld* World = GetEditorWorldChecked())
+    {
+        const FString CurrentMapPath = World->GetPackage() ? World->GetPackage()->GetName() : TEXT("");
+        if (CurrentMapPath == NormalizedMapPath)
+        {
+            return CreateMapLifecycleSuccess(TEXT("load_map"), NormalizedMapPath, true, false);
+        }
+    }
+
+    ScheduleSessionDisruptingMapAction([NormalizedMapPath]()
+    {
+        UEditorLevelLibrary::LoadLevel(NormalizedMapPath);
+    });
+
+    return CreateMapLifecycleSuccess(TEXT("load_map"), NormalizedMapPath, true, true);
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleSaveCurrentMap(const FJsonObjectParameter& Params)
+{
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    const FString CurrentMapPath = World->GetPackage() ? World->GetPackage()->GetName() : TEXT("");
+    if (CurrentMapPath.IsEmpty())
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Current map path is empty"));
+    }
+
+    if (!UEditorLevelLibrary::SaveCurrentLevel())
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Failed to save current map: %s"), *CurrentMapPath));
+    }
+
+    return CreateMapLifecycleSuccess(TEXT("save_current_map"), CurrentMapPath, false);
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleSaveMapAs(const FJsonObjectParameter& Params)
+{
+    FString TargetMapPath;
+    if (!Params->TryGetStringField(TEXT("target_map_path"), TargetMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'target_map_path' parameter"));
+    }
+
+    UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+    if (!World)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    const FString CurrentMapPath = World->GetPackage() ? World->GetPackage()->GetName() : TEXT("");
+    if (CurrentMapPath.IsEmpty())
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Current map path is empty"));
+    }
+
+    const FString NormalizedTargetMapPath = NormalizeMapAssetPath(TargetMapPath);
+    if (CurrentMapPath == NormalizedTargetMapPath)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Target map path must differ from current map"));
+    }
+
+    if (!UEditorLevelLibrary::SaveCurrentLevel())
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Failed to save current map before save-as: %s"), *CurrentMapPath));
+    }
+
+    if (UEditorAssetLibrary::DoesAssetExist(NormalizedTargetMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Target map already exists: %s"), *NormalizedTargetMapPath));
+    }
+
+    const FString TargetFilename = FPackageName::LongPackageNameToFilename(
+        NormalizedTargetMapPath,
+        FPackageName::GetMapPackageExtension());
+
+    if (!FEditorFileUtils::SaveMap(World, TargetFilename))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Failed to save map as: %s"), *NormalizedTargetMapPath));
+    }
+
+    const FString CurrentMapAfterSave = World->GetPackage() ? World->GetPackage()->GetName() : NormalizedTargetMapPath;
+    return CreateMapLifecycleSuccess(TEXT("save_map_as"), CurrentMapAfterSave, CurrentMapAfterSave == NormalizedTargetMapPath, false);
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleCreateBlankMap(const FJsonObjectParameter& Params)
+{
+    FString MapPath;
+    if (!Params->TryGetStringField(TEXT("map_path"), MapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'map_path' parameter"));
+    }
+
+    const FString NormalizedMapPath = NormalizeMapAssetPath(MapPath);
+    if (UEditorAssetLibrary::DoesAssetExist(NormalizedMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Map already exists: %s"), *NormalizedMapPath));
+    }
+
+    ScheduleSessionDisruptingMapAction([NormalizedMapPath]()
+    {
+        UEditorLevelLibrary::NewLevel(NormalizedMapPath);
+    });
+
+    return CreateMapLifecycleSuccess(TEXT("create_blank_map"), NormalizedMapPath, true, true);
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleCreateMapFromTemplate(const FJsonObjectParameter& Params)
+{
+    FString MapPath;
+    FString TemplateMapPath;
+    if (!Params->TryGetStringField(TEXT("map_path"), MapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'map_path' parameter"));
+    }
+    if (!Params->TryGetStringField(TEXT("template_map_path"), TemplateMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'template_map_path' parameter"));
+    }
+
+    const FString NormalizedMapPath = NormalizeMapAssetPath(MapPath);
+    const FString NormalizedTemplateMapPath = NormalizeMapAssetPath(TemplateMapPath);
+
+    if (UEditorAssetLibrary::DoesAssetExist(NormalizedMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Map already exists: %s"), *NormalizedMapPath));
+    }
+
+    if (!UEditorAssetLibrary::DoesAssetExist(NormalizedTemplateMapPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Template map not found: %s"), *NormalizedTemplateMapPath));
+    }
+
+    ScheduleSessionDisruptingMapAction([NormalizedMapPath, NormalizedTemplateMapPath]()
+    {
+        UEditorLevelLibrary::NewLevelFromTemplate(NormalizedMapPath, NormalizedTemplateMapPath);
+    });
+
+    return CreateMapLifecycleSuccess(TEXT("create_map_from_template"), NormalizedMapPath, true, true);
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleSpawnStaticMeshActor(const FJsonObjectParameter& Params)
+{
+    FString ActorName;
+    FString MeshPath;
+    if (!Params->TryGetStringField(TEXT("name"), ActorName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'name' parameter"));
+    }
+    if (!Params->TryGetStringField(TEXT("mesh_path"), MeshPath))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'mesh_path' parameter"));
+    }
+
+    UWorld* World = GetEditorWorldChecked();
+    if (!World)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    if (FindActorByExactName(ActorName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Actor with name '%s' already exists"), *ActorName));
+    }
+
+    UStaticMesh* StaticMesh = LoadObject<UStaticMesh>(nullptr, *MeshPath);
+    if (!StaticMesh)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Static mesh not found: %s"), *MeshPath));
+    }
+
+    FVector Location(0.0f, 0.0f, 0.0f);
+    FRotator Rotation(0.0f, 0.0f, 0.0f);
+    FVector Scale(1.0f, 1.0f, 1.0f);
+    if (Params->HasField(TEXT("location")))
+    {
+        Location = FUnrealMCPCommonUtils::GetVectorFromJson(Params, TEXT("location"));
+    }
+    if (Params->HasField(TEXT("rotation")))
+    {
+        Rotation = FUnrealMCPCommonUtils::GetRotatorFromJson(Params, TEXT("rotation"));
+    }
+    if (Params->HasField(TEXT("scale")))
+    {
+        Scale = FUnrealMCPCommonUtils::GetVectorFromJson(Params, TEXT("scale"));
+    }
+
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.Name = *ActorName;
+    AStaticMeshActor* NewActor = World->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), Location, Rotation, SpawnParams);
+    if (!NewActor)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to spawn static mesh actor"));
+    }
+
+    if (UStaticMeshComponent* MeshComponent = NewActor->GetStaticMeshComponent())
+    {
+        MeshComponent->SetStaticMesh(StaticMesh);
+    }
+
+    FTransform Transform = NewActor->GetTransform();
+    Transform.SetScale3D(Scale);
+    NewActor->SetActorTransform(Transform);
+
+#if WITH_EDITOR
+    NewActor->SetActorLabel(ActorName);
+#endif
+
+    return FUnrealMCPCommonUtils::ActorToJsonObject(NewActor, true);
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleFindActorsByPrefix(const FJsonObjectParameter& Params)
+{
+    FString Prefix;
+    if (!Params->TryGetStringField(TEXT("prefix"), Prefix))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'prefix' parameter"));
+    }
+
+    TArray<AActor*> AllActors;
+    GetAllEditorActors(AllActors);
+
+    TArray<TSharedPtr<FJsonValue>> MatchingActors;
+    for (AActor* Actor : AllActors)
+    {
+        if (ActorMatchesPrefix(Actor, Prefix))
+        {
+            MatchingActors.Add(FUnrealMCPCommonUtils::ActorToJson(Actor));
+        }
+    }
+
+    FJsonObjectParameter ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetBoolField(TEXT("success"), true);
+    ResultObj->SetStringField(TEXT("prefix"), Prefix);
+    ResultObj->SetNumberField(TEXT("count"), MatchingActors.Num());
+    ResultObj->SetArrayField(TEXT("actors"), MatchingActors);
+    return ResultObj;
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleDeleteActorsByPrefix(const FJsonObjectParameter& Params)
+{
+    FString Prefix;
+    if (!Params->TryGetStringField(TEXT("prefix"), Prefix))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'prefix' parameter"));
+    }
+
+    TArray<AActor*> AllActors;
+    GetAllEditorActors(AllActors);
+
+    TArray<TSharedPtr<FJsonValue>> DeletedActors;
+    for (AActor* Actor : AllActors)
+    {
+        if (!ActorMatchesPrefix(Actor, Prefix))
+        {
+            continue;
+        }
+
+        DeletedActors.Add(FUnrealMCPCommonUtils::ActorToJson(Actor));
+        Actor->Destroy();
+    }
+
+    FJsonObjectParameter ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetBoolField(TEXT("success"), true);
+    ResultObj->SetStringField(TEXT("prefix"), Prefix);
+    ResultObj->SetNumberField(TEXT("deleted_count"), DeletedActors.Num());
+    ResultObj->SetArrayField(TEXT("deleted_actors"), DeletedActors);
+    return ResultObj;
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleResetTestbed(const FJsonObjectParameter& Params)
+{
+    return HandleDeleteActorsByPrefix(Params);
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleEnsureCaptureCamera(const FJsonObjectParameter& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("name"), ActorName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'name' parameter"));
+    }
+
+    FVector Location(0.0f, 0.0f, 300.0f);
+    FRotator Rotation(-20.0f, 180.0f, 0.0f);
+    if (Params->HasField(TEXT("location")))
+    {
+        Location = FUnrealMCPCommonUtils::GetVectorFromJson(Params, TEXT("location"));
+    }
+    if (Params->HasField(TEXT("rotation")))
+    {
+        Rotation = FUnrealMCPCommonUtils::GetRotatorFromJson(Params, TEXT("rotation"));
+    }
+
+    UWorld* World = GetEditorWorldChecked();
+    if (!World)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    AActor* ExistingActor = FindActorByExactName(ActorName);
+    ACameraActor* CameraActor = Cast<ACameraActor>(ExistingActor);
+    if (!CameraActor && ExistingActor)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Actor exists but is not a camera: %s"), *ActorName));
+    }
+
+    if (!CameraActor)
+    {
+        FActorSpawnParameters SpawnParams;
+        SpawnParams.Name = *ActorName;
+        CameraActor = World->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), Location, Rotation, SpawnParams);
+        if (!CameraActor)
+        {
+            return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create capture camera"));
+        }
+    }
+
+    CameraActor->SetActorLocation(Location);
+    CameraActor->SetActorRotation(Rotation);
+
+#if WITH_EDITOR
+    CameraActor->SetActorLabel(ActorName);
+#endif
+
+    FJsonObjectParameter ResultObj = FUnrealMCPCommonUtils::ActorToJsonObject(CameraActor, true);
+    ResultObj->SetBoolField(TEXT("success"), true);
+    ResultObj->SetStringField(TEXT("action"), TEXT("ensure_capture_camera"));
+    return ResultObj;
 }
 
 FJsonObjectParameter UMCPEditorTools::ConvertObjectToJson(UObject* TargetObject)

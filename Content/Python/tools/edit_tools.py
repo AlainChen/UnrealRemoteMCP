@@ -4,7 +4,7 @@ from mcp.server.fastmcp import Context
 import unreal
 
 import foundation.utility as unreal_utility
-from foundation.utility import call_cpp_tools
+from foundation.utility import call_cpp_tools, normalize_agent_result
 
 
 
@@ -289,6 +289,304 @@ def register_edit_tool( mcp:UnrealMCP):
             "name": name,
         }
         return call_cpp_tools(unreal.MCPEditorTools.handle_get_actor_properties, params)
+
+    @mcp.domain_tool("level")
+    def load_map(ctx: Context, map_path: str) -> Dict[str, Any]:
+        """Load a level by Unreal asset path.
+
+        This is a session-disrupting operation. Callers should be prepared to
+        reconnect to MCP before issuing follow-up requests.
+        """
+        params = {
+            "map_path": map_path,
+        }
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_load_map, params),
+            default_message="Map load requested.",
+            default_risk_tier="session-disrupting",
+            default_session_disrupted=True,
+            default_reconnect_required=True,
+        )
+
+    @mcp.domain_tool("level")
+    def save_current_map(ctx: Context) -> Dict[str, Any]:
+        """Save the currently active editor level."""
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_save_current_map, {}),
+            default_message="Current map saved.",
+            default_risk_tier="editor-stateful",
+        )
+
+    @mcp.domain_tool("level")
+    def save_map_as(ctx: Context, target_map_path: str) -> Dict[str, Any]:
+        """Save the current map to a new Unreal asset path.
+
+        This is a session-disrupting operation. Callers should be prepared to
+        reconnect to MCP before issuing follow-up requests.
+        """
+        params = {
+            "target_map_path": target_map_path,
+        }
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_save_map_as, params),
+            default_message="Save-as request completed.",
+            default_risk_tier="session-disrupting",
+            default_session_disrupted=True,
+            default_reconnect_required=True,
+        )
+
+    @mcp.domain_tool("level")
+    def create_blank_map(ctx: Context, map_path: str) -> Dict[str, Any]:
+        """Create a new blank level asset and load it.
+
+        This is a session-disrupting operation. Callers should be prepared to
+        reconnect to MCP before issuing follow-up requests.
+        """
+        params = {
+            "map_path": map_path,
+        }
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_create_blank_map, params),
+            default_message="Blank map created.",
+            default_risk_tier="session-disrupting",
+            default_session_disrupted=True,
+            default_reconnect_required=True,
+        )
+
+    @mcp.domain_tool("level")
+    def create_map_from_template(
+        ctx: Context,
+        map_path: str,
+        template_map_path: str,
+    ) -> Dict[str, Any]:
+        """Create a new level from a template map asset and load it.
+
+        This is a session-disrupting operation. Callers should be prepared to
+        reconnect to MCP before issuing follow-up requests.
+        """
+        params = {
+            "map_path": map_path,
+            "template_map_path": template_map_path,
+        }
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_create_map_from_template, params),
+            default_message="Map created from template.",
+            default_risk_tier="session-disrupting",
+            default_session_disrupted=True,
+            default_reconnect_required=True,
+        )
+
+    @mcp.domain_tool("level")
+    def spawn_static_mesh_actor(
+        ctx: Context,
+        name: str,
+        mesh_path: str,
+        location: List[float] = [0.0, 0.0, 0.0],
+        rotation: List[float] = [0.0, 0.0, 0.0],
+        scale: List[float] = [1.0, 1.0, 1.0],
+    ) -> Dict[str, Any]:
+        """Spawn a static mesh actor with a specific mesh asset."""
+        params = {
+            "name": name,
+            "mesh_path": mesh_path,
+            "location": location,
+            "rotation": rotation,
+            "scale": scale,
+        }
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_spawn_static_mesh_actor, params),
+            default_message="Static mesh actor spawned.",
+            default_risk_tier="editor-stateful",
+        )
+
+    @mcp.domain_tool("level")
+    def find_actors_by_prefix(ctx: Context, prefix: str) -> Dict[str, Any]:
+        """Find actors whose name or label starts with a prefix."""
+        params = {
+            "prefix": prefix,
+        }
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_find_actors_by_prefix, params),
+            default_message="Actor prefix lookup completed.",
+            default_risk_tier="editor-stateful",
+        )
+
+    @mcp.domain_tool("level")
+    def delete_actors_by_prefix(ctx: Context, prefix: str) -> Dict[str, Any]:
+        """Delete actors whose name or label starts with a prefix."""
+        params = {
+            "prefix": prefix,
+        }
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_delete_actors_by_prefix, params),
+            default_message="Actors deleted by prefix.",
+            default_risk_tier="editor-stateful",
+        )
+
+    @mcp.domain_tool("level")
+    def reset_testbed(ctx: Context, prefix: str) -> Dict[str, Any]:
+        """Reset a testbed by deleting actors under a prefix."""
+        params = {
+            "prefix": prefix,
+        }
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_reset_testbed, params),
+            default_message="Testbed reset completed.",
+            default_risk_tier="editor-stateful",
+        )
+
+    @mcp.domain_tool("level")
+    def ensure_capture_camera(
+        ctx: Context,
+        name: str,
+        location: List[float] = [0.0, 0.0, 300.0],
+        rotation: List[float] = [-20.0, 180.0, 0.0],
+    ) -> Dict[str, Any]:
+        """Create or update a reusable capture camera."""
+        params = {
+            "name": name,
+            "location": location,
+            "rotation": rotation,
+        }
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_ensure_capture_camera, params),
+            default_message="Capture camera ensured.",
+            default_risk_tier="editor-stateful",
+        )
+
+    @mcp.domain_tool("level")
+    def set_editor_camera(
+        ctx: Context,
+        location: List[float],
+        orientation: List[float],
+        distance: float = 0.0,
+    ) -> Dict[str, Any]:
+        """Set the active editor viewport camera using an explicit location and orientation."""
+        params = {
+            "location": location,
+            "orientation": orientation,
+            "distance": distance,
+        }
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_focus_viewport, params),
+            default_message="Editor camera updated.",
+            default_risk_tier="editor-stateful",
+        )
+
+    @mcp.domain_tool("level")
+    def capture_viewport(ctx: Context, filepath: str) -> Dict[str, Any]:
+        """Capture the current active editor viewport to an image file."""
+        params = {
+            "filepath": filepath,
+        }
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_take_screenshot, params),
+            default_message="Viewport captured.",
+            default_risk_tier="editor-stateful",
+        )
+
+    @mcp.domain_tool("level")
+    def capture_before_after(
+        ctx: Context,
+        before_path: str,
+        after_path: str,
+        before_location: Optional[List[float]] = None,
+        before_orientation: Optional[List[float]] = None,
+        after_location: Optional[List[float]] = None,
+        after_orientation: Optional[List[float]] = None,
+    ) -> Dict[str, Any]:
+        """Capture before/after viewport images using the active editor viewport.
+
+        This helper intentionally stays lightweight: it only moves the editor
+        camera when explicit transforms are provided, then captures each frame.
+        """
+        result: Dict[str, Any] = {
+            "success": True,
+            "captures": [],
+        }
+
+        if before_location is not None and before_orientation is not None:
+            before_result = call_cpp_tools(
+                unreal.MCPEditorTools.handle_focus_viewport,
+                {
+                    "location": before_location,
+                    "orientation": before_orientation,
+                    "distance": 0.0,
+                },
+            )
+            result["captures"].append({
+                "step": "before_focus",
+                "result": before_result,
+            })
+            if not before_result.get("success", True):
+                result["success"] = False
+                return normalize_agent_result(
+                    result,
+                    default_message="Before/after capture failed during before focus.",
+                    default_risk_tier="editor-stateful",
+                )
+
+        before_capture = call_cpp_tools(
+            unreal.MCPEditorTools.handle_take_screenshot,
+            {"filepath": before_path},
+        )
+        result["captures"].append({
+            "step": "before_capture",
+            "result": before_capture,
+        })
+        if not before_capture.get("success", True):
+            result["success"] = False
+            return normalize_agent_result(
+                result,
+                default_message="Before/after capture failed during before capture.",
+                default_risk_tier="editor-stateful",
+            )
+
+        if after_location is not None and after_orientation is not None:
+            after_focus = call_cpp_tools(
+                unreal.MCPEditorTools.handle_focus_viewport,
+                {
+                    "location": after_location,
+                    "orientation": after_orientation,
+                    "distance": 0.0,
+                },
+            )
+            result["captures"].append({
+                "step": "after_focus",
+                "result": after_focus,
+            })
+            if not after_focus.get("success", True):
+                result["success"] = False
+                return normalize_agent_result(
+                    result,
+                    default_message="Before/after capture failed during after focus.",
+                    default_risk_tier="editor-stateful",
+                )
+
+        after_capture = call_cpp_tools(
+            unreal.MCPEditorTools.handle_take_screenshot,
+            {"filepath": after_path},
+        )
+        result["captures"].append({
+            "step": "after_capture",
+            "result": after_capture,
+        })
+        if not after_capture.get("success", True):
+            result["success"] = False
+            return normalize_agent_result(
+                result,
+                default_message="Before/after capture failed during after capture.",
+                default_risk_tier="editor-stateful",
+            )
+
+        result["before_path"] = before_capture.get("filepath", before_path)
+        result["after_path"] = after_capture.get("filepath", after_path)
+        return normalize_agent_result(
+            result,
+            default_message="Before/after capture completed.",
+            default_risk_tier="editor-stateful",
+        )
+
     @mcp.domain_tool("level")
     def set_actor_property(
         ctx: Context,

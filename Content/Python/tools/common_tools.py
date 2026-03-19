@@ -5,6 +5,7 @@ import time
 from typing import Any, Awaitable, Dict, List, Optional
 from foundation.log_handler import LogCaptureScope
 from foundation.mcp_app import UnrealMCP
+from foundation.utility import make_health_result
 from mcp.server.fastmcp.server import FastMCP
 from mcp.types import CallToolResult, TextContent
 import unreal
@@ -12,6 +13,98 @@ from foundation.utility import like_str_parameter
 
 
 def register_common_tools(mcp : UnrealMCP):
+    @mcp.game_thread_tool()
+    def ping() -> Dict[str, Any]:
+        """Lightweight health probe for external clients."""
+        return make_health_result(
+            ok=True,
+            data={"alive": True},
+            message="RemoteMCP server is reachable.",
+        )
+
+    @mcp.game_thread_tool()
+    def get_current_level() -> Dict[str, Any]:
+        """Return the active editor level path and name."""
+        try:
+            world = unreal.EditorLevelLibrary.get_editor_world()
+            package_name = None
+            level_name = None
+            if world:
+                level_name = world.get_name()
+                pkg = world.get_package()
+                package_name = pkg.get_name() if pkg else None
+            return make_health_result(
+                ok=world is not None,
+                data={
+                    "current_level": package_name or level_name or "unknown",
+                    "world_name": level_name,
+                    "editor_world_available": world is not None,
+                    "session_ready": world is not None,
+                },
+                message="Current editor level resolved." if world else "Editor world is not available.",
+                warnings=[] if world else ["editor_world_unavailable"],
+                error_code=None if world else "editor_state_error",
+                recommended_client_action="continue" if world else "reconnect",
+            )
+        except Exception as e:
+            return make_health_result(
+                ok=False,
+                data={},
+                message=f"Failed to resolve current level: {e}",
+                error_code="editor_state_error",
+                recommended_client_action="reconnect",
+            )
+
+    @mcp.game_thread_tool()
+    def get_editor_state() -> Dict[str, Any]:
+        """Return a minimal reconnect-oriented editor state snapshot."""
+        try:
+            world = unreal.EditorLevelLibrary.get_editor_world()
+            actor_count = 0
+            if world:
+                try:
+                    actors = unreal.EditorLevelLibrary.get_all_level_actors()
+                    actor_count = len(actors) if actors else 0
+                except Exception:
+                    actor_count = 0
+
+            try:
+                setting = unreal.get_default_object(unreal.MCPSetting)
+                port = setting.port if setting else None
+            except Exception:
+                port = None
+
+            package_name = None
+            world_name = None
+            if world:
+                world_name = world.get_name()
+                pkg = world.get_package()
+                package_name = pkg.get_name() if pkg else None
+
+            return make_health_result(
+                ok=world is not None,
+                data={
+                    "editor_world_available": world is not None,
+                    "current_level": package_name or world_name or "unknown",
+                    "world_name": world_name,
+                    "actor_count": actor_count,
+                    "mcp_port": port,
+                    "session_ready": world is not None,
+                },
+                message="Editor state resolved." if world else "Editor world is not available.",
+                warnings=[] if world else ["editor_world_unavailable"],
+                error_code=None if world else "editor_state_error",
+                recommended_client_action="continue" if world else "reconnect",
+            )
+        except Exception as e:
+            return make_health_result(
+                ok=False,
+                data={},
+                message=f"Failed to inspect editor state: {e}",
+                error_code="editor_state_error",
+                recommended_client_action="reconnect",
+            )
+
     @mcp.game_thread_tool()
     def run_python_script(script: str):
         """Run a Python script in the Unreal Engine editor，the result must is str.

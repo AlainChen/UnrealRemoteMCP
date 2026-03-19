@@ -99,6 +99,86 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
 	static FJsonObjectParameter HandleTakeScreenshot(const FJsonObjectParameter& Params);
 
+	/**
+	 * 加载指定资产路径的关卡
+	 * @param Params - 输入参数，必须包含 "map_path" 字段
+	 * @return 包含加载结果的 JSON 对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleLoadMap(const FJsonObjectParameter& Params);
+
+	/**
+	 * 保存当前编辑器中活动关卡
+	 * @param Params - 输入参数(不需要特定字段)
+	 * @return 包含保存结果的 JSON 对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleSaveCurrentMap(const FJsonObjectParameter& Params);
+
+	/**
+	 * 将当前活动关卡另存为新的资产路径
+	 * @param Params - 输入参数，必须包含 "target_map_path" 字段
+	 * @return 包含另存为结果的 JSON 对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleSaveMapAs(const FJsonObjectParameter& Params);
+
+	/**
+	 * 创建一张新的空白关卡
+	 * @param Params - 输入参数，必须包含 "map_path" 字段
+	 * @return 包含创建结果的 JSON 对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleCreateBlankMap(const FJsonObjectParameter& Params);
+
+	/**
+	 * 从模板创建一张新关卡
+	 * @param Params - 输入参数，必须包含 "map_path" 和 "template_map_path" 字段
+	 * @return 包含创建结果的 JSON 对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleCreateMapFromTemplate(const FJsonObjectParameter& Params);
+
+	/**
+	 * 创建带静态网格的Actor
+	 * @param Params - 输入参数，必须包含 "name" 和 "mesh_path" 字段
+	 * @return 包含创建结果的JSON对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleSpawnStaticMeshActor(const FJsonObjectParameter& Params);
+
+	/**
+	 * 按名称前缀查找Actor
+	 * @param Params - 输入参数，必须包含 "prefix" 字段
+	 * @return 包含匹配Actor数组的JSON对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleFindActorsByPrefix(const FJsonObjectParameter& Params);
+
+	/**
+	 * 按名称前缀删除Actor
+	 * @param Params - 输入参数，必须包含 "prefix" 字段
+	 * @return 包含删除结果的JSON对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleDeleteActorsByPrefix(const FJsonObjectParameter& Params);
+
+	/**
+	 * 重置测试场景(当前实现等价于按前缀删除)
+	 * @param Params - 输入参数，必须包含 "prefix" 字段
+	 * @return 包含重置结果的JSON对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleResetTestbed(const FJsonObjectParameter& Params);
+
+	/**
+	 * 创建或更新一个用于证据采集的相机
+	 * @param Params - 输入参数，必须包含 "name"，可选 location/rotation
+	 * @return 包含相机结果的JSON对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleEnsureCaptureCamera(const FJsonObjectParameter& Params);
+
 	
 	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
 	static FJsonObjectParameter ConvertObjectToJson(UObject* TargetObject);

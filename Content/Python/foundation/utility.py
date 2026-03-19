@@ -1,5 +1,5 @@
 import json
-from typing import Any, Callable,Optional
+from typing import Any, Callable, Optional
 
 from mcp.types import TextContent
 import pydantic_core
@@ -93,5 +93,113 @@ def attach_logs_to_result(result: Any, logs: list[str]|str) -> Any:
                 }).decode()
             return [text_content_]
     return result
+
+
+def normalize_agent_result(
+    raw: dict,
+    *,
+    default_message: str = "",
+    default_risk_tier: str = "safe",
+    default_session_disrupted: bool = False,
+    default_reconnect_required: bool = False,
+) -> dict:
+    """Normalize C++ tool output into a more agent-friendly envelope.
+
+    The current bridge still carries legacy fields such as `success` / `error`.
+    This helper preserves those fields while adding a stable outer shape that is
+    easier for external agents to reason about.
+    """
+    if raw is None:
+        raw = {}
+
+    ok = bool(raw.get("success", "error" not in raw))
+    error_message = str(raw.get("error", "")).strip()
+    message = error_message or str(raw.get("message", "")).strip() or default_message
+    session_disrupted = bool(raw.get("session_disrupted", default_session_disrupted))
+    reconnect_required = bool(raw.get("reconnect_required", default_reconnect_required or session_disrupted))
+    risk_tier = str(raw.get("risk_tier", default_risk_tier))
+    recommended_client_action = raw.get(
+        "recommended_client_action",
+        "reconnect" if reconnect_required else "continue",
+    )
+
+    reserved = {
+        "success",
+        "error",
+        "message",
+        "risk_tier",
+        "session_disrupted",
+        "reconnect_required",
+        "warnings",
+        "error_code",
+        "ok",
+        "data",
+        "recommended_client_action",
+    }
+    data = {k: v for k, v in raw.items() if k not in reserved}
+
+    error_code = raw.get("error_code") or infer_error_code(raw, message, reconnect_required)
+
+    return {
+        "ok": ok,
+        "data": data,
+        "warnings": list(raw.get("warnings", [])) if isinstance(raw.get("warnings", []), list) else [str(raw.get("warnings"))],
+        "error_code": error_code,
+        "message": message,
+        "risk_tier": risk_tier,
+        "session_disrupted": session_disrupted,
+        "reconnect_required": reconnect_required,
+        "recommended_client_action": recommended_client_action,
+        # Keep legacy fields for compatibility while the fork transitions.
+        **raw,
+    }
+
+
+def make_health_result(
+    *,
+    ok: bool,
+    data: dict,
+    message: str,
+    warnings: list[str] | None = None,
+    error_code: str | None = None,
+    recommended_client_action: str = "continue",
+) -> dict:
+    return {
+        "ok": ok,
+        "data": data,
+        "warnings": warnings or [],
+        "error_code": error_code,
+        "message": message,
+        "risk_tier": "safe",
+        "session_disrupted": False,
+        "reconnect_required": False,
+        "recommended_client_action": recommended_client_action,
+    }
+
+
+def infer_error_code(raw: dict, message: str, reconnect_required: bool) -> str | None:
+    if not message:
+        return "session_disrupted" if reconnect_required else None
+
+    lowered = message.lower()
+    if reconnect_required and ("restart" in lowered or "reconnect" in lowered):
+        return "session_disrupted"
+    if "missing '" in lowered or "must be provided" in lowered:
+        return "invalid_arguments"
+    if "already exists" in lowered:
+        if "map" in lowered:
+            return "map_already_exists"
+        return "already_exists"
+    if "not found" in lowered:
+        if "map" in lowered or "template map" in lowered:
+            return "map_not_found"
+        return "not_found"
+    if "current map path is empty" in lowered or "/temp/untitled" in lowered:
+        return "map_unsaved"
+    if "failed to get editor world" in lowered or "editor world" in lowered:
+        return "editor_state_error"
+    if reconnect_required:
+        return "session_disrupted"
+    return None
        
 

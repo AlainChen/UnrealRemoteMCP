@@ -1,204 +1,292 @@
-# RemoteMCP 插件
+# UnrealRemoteMCP
 
-> [!NOTE]
-> 本项目用于开发 UnrealMCP。
+An Unreal Editor plugin that exposes Unreal Engine editor capabilities through MCP.
 
-这是一个基于UnrealEngine内置的Python插件实现的[MCP Server](https://modelcontextprotocol.io/introduction)。
-该插件的目标是希望使得Unreal开发者可以更容易的利用AI来辅助Unreal项目的开发。
+This fork keeps the original project usable, but reframes it as the editor-side foundation for more stable automation, benchmark, and capability-gym workflows.
 
-## 插件目标
+## Project Relationship
 
-在尝试 MCP 时，主要考虑以下场景：
+There are two related projects in this workflow:
 
-1. **AI 提供思路参考**: 例如在判断报错信息时，通过 MCP 为 AI 提供上下文，帮助快速定位问题。
-2. **批量任务处理**: 利用 AI 完成一次性的大量重复性工作，例如批量删除某类 Actor 或修改某类配置。
-3. **自动化工作流**: 与其他自动任务工具（如 n8n）配合使用，使非程序背景的团队成员（如策划）也能定义自动化工作流。
+- `UnrealRemoteMCP`
+  - Runs inside Unreal Editor
+  - Owns editor-native capabilities
+  - Starts the MCP server
+  - Executes editor tools on the game thread
 
-## Quick Start
+- `UnrealMCPHub`
+  - Runs outside Unreal Editor
+  - Owns orchestration, preflight, benchmark-lite, artifacts, and workflow-level policy
+  - Can compile, launch, discover, monitor, and proxy Unreal instances
 
-> 现在是AI的时代了，当你下载完本仓库之后可以直接咨询AI这个工具应该如何使用，AI应该会给到更真实，符合最新版本的使用指导
+In short:
 
-该插件会在 Unreal Editor 内启动一个 **MCP Server（Streamable HTTP）**，使用非常简单：
+- `RemoteMCP` is the editor-side capability layer
+- `Hub` is the outer control plane
 
-1. 将插件克隆到 Unreal Engine 的插件目录：
+## Fork Intent
 
-   ```bash
-   git clone <repository-url> <Unreal-Engine-Plugins-Directory>/RemoteMCP
-   ```
-2. 安装python依赖，首先保证本地有uv或者pip,最好是使用uv，保证python版本为3.11，然后使用pip下载以下几个package到指定目录
+This fork is not trying to replace the upstream project overnight.
 
-   ```
-   cd <Repo>/Content/Python
-   uv pip install httpx --target ./Lib/site-packages --force-reinstall --upgrade
-   uv pip install mcp[cli] --target ./Lib/site-packages --force-reinstall --upgrade
-   uv pip install anyio --target ./Lib/site-packages --force-reinstall --upgrade   
-   uv pip install pywin32 --target ./Lib/site-packages --force-reinstall --upgrade
+The current goal is to evolve the plugin in a compatibility-friendly way so it becomes:
 
-   ```
-3. 启动引擎并在 `Edit->Plugins`面板中启动 `RemoteMCP`插件
-4. 重启引擎
-5. 设置 `Edit -> Editor Preferences -> MCP Setting->Enable` 为True，（同时建议打开AutoStart),重启引擎
-6. 使用控制台命令 mcp.start，如果你启用了AutoStart则不需要这一步
+- more stable for long-running automation
+- easier to extend with structured tools
+- better suited for team-wide deployment
+- less dependent on long `run_python_script` chains
 
-此时MCP Server应当已经正常启动，你可以在 `Edit -> EditorPreferences->MCP Setting`处检查MCP Server是否自动启动以及对应的Port
+The long-term direction is:
 
-随后你可以使用任意的 MCP Client 来连接该 MCP Server（例如 Cherry Studio、Cursor 等）。连接时选择 **Streamable HTTP**，并在链接中输入 `http://localhost:<Your Port>/mcp` 即可。
+- keep Unreal-native capabilities close to the editor
+- reduce Python responsibility over time
+- expose more structured, contract-based editor tools
+- support a more modern outer orchestration layer later if needed
 
-如果你在设置中修改了Port，则可以在Unreal的Console中输入 `MCP.Restart`来重新启动
+## Compatibility Strategy
 
-## 使用参考（零基础也能上手）
+This fork is intended to stay compatible with the original workflow where practical.
 
-下面按“完全没经验的小白”视角，从 0 开始把 UE 侧、Cursor 侧、验证与排错全部走通。
+That means:
 
-### 0）你需要准备什么
+- existing Python and MCP startup flow should keep working
+- existing clients that talk to the plugin should not break unnecessarily
+- new functionality should be added incrementally behind stable tool contracts
+- high-risk script-heavy paths should be replaced gradually rather than deleted all at once
 
-- **Unreal Editor**：需要在编辑器里运行（不是打包后的游戏）。
-- **插件**：启用 `RemoteMCP`，并同时启用 Unreal 自带的 **Python Editor Script Plugin**（`Edit -> Plugins -> Scripting`）。
-- **重启编辑器**：启用插件后必须重启一次。
+The preferred evolution path is:
 
-### 1）在 Unreal 里确认端口（一定要先做）
+1. keep the current plugin boot flow
+2. add structured editor-side tools for high-frequency operations
+3. standardize result and error contracts
+4. reduce reliance on long editor Python scripts
+5. move heavier orchestration concerns out of the plugin later
 
-1. 打开 `Edit -> Editor Preferences -> MCP Setting`
-2. 找到 `Port`（例如 `8422`），记下来
-3. 如你修改过端口，后面客户端 URL 里的端口也要跟着改
+## AI Usage Modes
 
-> 小提示：服务默认 URL 形如 `http://127.0.0.1:<port>/mcp`（注意必须带 `/mcp` 路径）。
+This fork should not be designed only for fully autonomous agents.
 
-### 2）启动 / 停止 / 重载（在 Unreal 控制台执行）
+In practical Unreal workflows, AI is typically used across several different modes:
 
-在 Unreal 的输出日志（Output Log）里打开控制台输入框，执行以下命令：
+1. advisory / read-only analysis
+   - inspect the current level
+   - explain assets, actors, blueprints, or editor state
+   - help humans reason about next steps without changing anything
 
-- **启动**：`MCP.Start`
-- **停止**：`MCP.Stop`
-- **重启（推荐）**：`MCP.Restart`
-- **热重载工具列表**（你改了 `Content/Python/tools/*` 但客户端看不到更新时用）：`MCP.Reload`
-- **查看状态**：`MCP.State`
+2. sandbox prototyping
+   - create or modify assets in isolated test areas
+   - generate gym/testbed content
+   - capture before/after evidence with low production risk
 
-### 3）用 Cursor 连接（推荐：最适合新手）
+3. restricted co-building
+   - allow bounded changes inside clearly scoped areas
+   - rely on explicit contracts, reconnect semantics, and repeatable validation
 
-#### A）准备一个“AI 工作区”（强烈推荐）
+4. workflow-node automation
+   - run preflight checks
+   - gather state and evidence
+   - prepare artifacts for review and later automation layers
 
-1. 在任意位置新建一个空文件夹（例如 `D:\UnrealAIWorkspace`），用 Cursor 打开它
-2. 把本仓库里的 `CLAUDE.md` **复制**到这个空文件夹根目录
-3. 在 Cursor 设置里：`Tools & MCP -> Rule and Commands` 勾选 **include `CLAUDE.md` in Context**
+5. high-privilege maintenance
+   - powerful editor-changing operations
+   - should remain rare, explicit, and policy-controlled
 
-#### B）配置 Cursor 的 MCP（项目级配置：最稳）
+P0 in this fork mainly supports:
 
-在你刚才的“AI 工作区”根目录创建文件：`.cursor/mcp.json`，内容如下（把 `<port>` 改成你在 UE 里看到的端口）：
+- advisory / read-only analysis
+- workflow-node automation
+- sandbox prototyping
 
-```json
-{
-  "mcpServers": {
-    "unreal_mcp": {
-        "type": "streamable-http",
-        "url": "http://127.0.0.1:<port>/mcp"
-    }
-  }
-}
-```
+Restricted co-building becomes more realistic after the contract, error, and reconnect layers are stronger.
 
-> 说明：`127.0.0.1` 表示 Unreal 跑在你本机；如果 Unreal 在另一台机器上，把它改成那台机器的局域网 IP（并放行防火墙端口）。
+High-privilege maintenance should remain out of scope until the plugin has much clearer safety and lifecycle guarantees.
 
-#### C）在 Cursor 里启用并验证
+## Why This Fork Exists
 
-1. 先回到 Unreal 执行一次 `MCP.Restart`
-2. 在 Cursor 打开 `Settings -> Tools & MCP`（或设置里搜索 “MCP”）
-3. 找到 `unreal_mcp` 并连接/启用
-4. 连接成功后你应该能看到工具列表（例如 `get_unreal_state`、`run_python_script`）
+The original project already provides a strong base:
 
-### 4）用其他 MCP Client 连接（Cherry Studio / Inspector 等）
+- editor subsystem lifecycle
+- MCP server startup inside Unreal Editor
+- game-thread tool execution
+- domain-based tool dispatch
+- a mix of C++ editor tools and Python-registered tools
 
-- **连接类型**：选择 **Streamable HTTP**
-- **URL**：`http://127.0.0.1:<port>/mcp`
+The current pain points are mostly about stability and structure:
 
-### 5）新手必做：用 2 个最简单的工具验证链路
+- too much high-level work still falls back to `run_python_script`
+- map lifecycle tooling is weak
+- scene/testbed construction is not yet structured enough
+- lighting, capture, and post-process flows are still brittle
+- tool result contracts are not yet consistent enough for robust automation
 
-连接成功后，建议立刻调用：
+One important current limitation is that map-changing operations are not yet seamless inside a single MCP session. Until the bridge lifecycle is redesigned, callers should treat those tools as session-disrupting and reconnect before issuing follow-up requests.
 
-- **`get_unreal_state`**：确认引擎在跑、端口配置正确、当前关卡/Actor 数量可读
-- **`run_python_script`**：跑一段最小脚本（建议把输出写到 `result` 变量）
+## P0 Foundation Priorities
 
-`run_python_script` 示例：
+The first priority is not "more tools everywhere".
 
-```python
-import unreal
-result = {
-    "level": unreal.EditorLevelLibrary.get_current_level_name(),
-    "actor_count": len(unreal.EditorLevelLibrary.get_all_level_actors())
-}
-```
+It is to add a small, stable foundation layer for automation.
 
-### 6）常见问题（90% 的“连不上/没反应”都在这）
+### P0
 
-- **一直连接不上**：检查 URL 是否包含 `/mcp`，例如 `http://127.0.0.1:8422/mcp`
-- **改了端口但还是旧端口**：UE 里改完 `Port` 后执行 `MCP.Restart`
-- **工具列表不刷新**：UE 控制台执行 `MCP.Reload`（不行就 `MCP.Restart`），然后在客户端刷新/重连
-- **远程连接失败**：把 `127.0.0.1` 换成运行 Unreal 的机器 IP，并放行该端口的防火墙入站规则
+- map lifecycle
+  - `create_blank_map`
+  - `create_map_from_template`
+  - `load_map`
+  - `save_current_map`
+  - `save_map_as`
 
-## 工具扩展
+  Compatibility note:
+  - `save_current_map` is expected to remain safe inside an active session
+  - the other map lifecycle tools should currently be treated as session-disrupting
 
-目前该插件中只提供了少量的tool，目前核心功能都依赖AI通过编写python代码来实现。由于基于Unreal的Python
+- scene and testbed construction
+  - `spawn_static_mesh_actor`
+  - `find_actors_by_prefix`
+  - `delete_actors_by_prefix`
+  - `reset_testbed`
+  - `ensure_capture_camera`
 
-扩展来开发，所以新增tool也会非常方便。
+- evidence capture
+  - `set_editor_camera`
+  - `capture_viewport`
+  - `capture_before_after`
 
-当你需要扩展一个tool时，可以直接修改 `Content\Python\tools\common_tools.py`，示例如下
+- agent-facing baseline semantics
+  - standardize the minimum result shape for current structured tools
+  - mark `risk_tier`
+  - mark `session_disrupted`
+  - mark `reconnect_required`
 
-```python
-def register_common_tools(mcp : UnrealMCP):
-    @mcp.tool()
-    def first_tool():
-        return "Hello from first tool!"
-  
-    @mcp.game_thread_tool()
-    def get_actor_count():
-        """Get the number of actors in the current Unreal Engine scene."""
-        try:
-            # 使用 Unreal 的 ActorIterator 获取所有 Actor
-            world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
-            if not world:
-                unreal.log_error("Failed to get the current world.")
-                return 0
-            actor_count = sum(1 for _ in unreal.ActorIterator(world))
-            unreal.log(f"Number of actors in the scene: {actor_count}")
-            return actor_count
-        except Exception as e:
-            unreal.log_error(f"Failed to get actor count: {str(e)}")
-            return 0
-```
+- minimal health and reconnect tools
+  - `ping`
+  - `get_editor_state`
+  - `get_current_level`
 
-# 项目结构
+P0 is not finished when tools merely exist. It is finished when the current structured tool set is predictable enough for external agents to chain safely.
 
-```
-RemoteMCP
-├── Content
-│   ├── EditorUI
-│   │   └── MainPanel.uasset
-│   └── Python
-│       ├── foundation
-│       │   ├── global_context.py
-│       │   ├── log_handler.py
-│       │   ├── mcp_app.py
-│       │   └── utility.py
-│       ├── tools
-│       │   └── common_tools.py
-│       ├── env.bat
-│       ├── init_mcp.py
-│       ├── inspector.bat
-│       └── unreal_python_tools.py
-├── Resources
-│   └── plugin_image.png
-├── Source
-│   └── RemoteMCP
-│       ├── Private
-│       │   └── RemoteMCP.cpp
-│       └── Public
-│           ├── RemoteMCP.h
-│           └── Settings.h
-├── PromptCase.md
-├── README.md
-└── RemoteMCP.uplugin
-```
+### P0.5
 
-# 许可证
+- core error codes for map / scene / capture paths
+- contract normalization across current P0 tools
+- better reconnect-oriented diagnostics
 
-此项目基于 MIT 许可证开源。详情请参阅 LICENSE 文件。
+### P1
+
+- lighting rig and presets
+- post process wrappers
+- structured error taxonomy
+- task step logging and checkpoints
+
+## What Still Needs Work Right Now
+
+Even after the latest map-transition stabilization work, several important foundation items are still open:
+
+- current P0 tool results are not fully normalized yet
+- health/reconnect helpers are still missing
+- map-changing tools are stable as session-disrupting operations, but not yet seamless
+- `save_map_as` still needs better handling for unnamed temporary maps
+- scene/testbed tools should be revalidated as a group under repeated chained use
+
+The next recommended sequence is:
+
+1. finish P0 contract and health semantics
+2. add core error codes and result normalization
+3. only then move deeper into lighting presets and higher-level gym tooling
+
+## Deployment Vision
+
+The long-term goal is to make this plugin easy to deploy and run across many teammates' machines.
+
+That requires:
+
+- fewer local one-off scripts
+- more structured editor-side capabilities
+- clearer version and compatibility boundaries
+- easier setup and health checks
+- less hidden editor state dependence
+
+This fork is still in the foundation phase, but the intended direction is team-scale operability rather than one-off experimentation.
+
+## Repository Structure
+
+- `Source/RemoteMCP`
+  - Unreal plugin C++ code
+- `Content/Python`
+  - Python bridge, MCP server bootstrap, and Python-side tools
+- `docs/`
+  - reference notes and refactor planning
+
+## Current Architecture
+
+Today the plugin is a hybrid system:
+
+- C++ plugin layer
+  - module startup
+  - editor subsystem
+  - bridge objects
+  - some editor-native tools
+
+- Python MCP layer
+  - FastMCP server
+  - tool registration
+  - domain dispatch
+  - game-thread scheduling helpers
+
+This fork currently preserves that architecture, but aims to shift the balance toward:
+
+- more C++ structured tool foundations
+- thinner Python bridge logic
+- more stable contracts for external orchestration
+
+## Recommended Reading
+
+For the generic refactor direction and capability-gap framing, see the companion notes in the related `UnrealMCPHub` fork:
+
+- `docs/unreal-ai-playbook/remote-mcp-generic-roadmap.md`
+- `docs/unreal-ai-playbook/gym/hub-vs-remotemcp-boundary.zh-CN.md`
+- `docs/unreal-ai-playbook/gym/gym-tooling-backlog.zh-CN.md`
+
+For this fork's first concrete implementation target, see:
+
+- `docs/compatibility_refactor_roadmap.md`
+- `docs/p0_map_lifecycle_design.md`
+
+## Upstream
+
+This repository is a fork of the original `blackplume233/UnrealRemoteMCP`.
+
+The intent is:
+
+- keep upstream improvements easy to merge where possible
+- keep fork-specific foundation work isolated and understandable
+- contribute back small, generally useful changes when they are mature enough
+
+## Fork Sync Strategy
+
+This fork should not become a long-lived incompatible branch.
+
+- `master` should act as the stable foundation branch for this fork
+- feature and refactor work should happen on short-lived `codex/*` branches first
+- once a capability is validated and documented, it can move into `master`
+- only smaller, broadly reusable improvements should be carved out for upstream proposals
+
+Recommended maintenance loop:
+
+1. `fetch upstream`
+2. update local `master` from `upstream/master`
+3. rebase or merge active `codex/*` work on top of the refreshed `master`
+4. split out upstream-friendly changes only when they are small, stable, and not tied to fork-specific workflow assumptions
+
+In practice, the fork keeps:
+- compatibility-first editor foundation work
+- agent-facing contract work
+- deployment and orchestration-oriented notes
+
+Potential upstream candidates are usually:
+- focused lifecycle fixes
+- safer editor-tool implementations
+- general-purpose result and error-contract improvements
+
+## License
+
+Please refer to the upstream repository and local license files for licensing details.
