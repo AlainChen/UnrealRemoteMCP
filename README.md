@@ -261,6 +261,32 @@ The intent is:
 - keep fork-specific foundation work isolated and understandable
 - contribute back small, generally useful changes when they are mature enough
 
+## Fork Sync Strategy
+
+This fork should not become a long-lived incompatible branch.
+
+- `master` should act as the stable foundation branch for this fork
+- feature and refactor work should happen on short-lived `codex/*` branches first
+- once a capability is validated and documented, it can move into `master`
+- only smaller, broadly reusable improvements should be carved out for upstream proposals
+
+Recommended maintenance loop:
+
+1. `fetch upstream`
+2. update local `master` from `upstream/master`
+3. rebase or merge active `codex/*` work on top of the refreshed `master`
+4. split out upstream-friendly changes only when they are small, stable, and not tied to fork-specific workflow assumptions
+
+In practice, the fork keeps:
+- compatibility-first editor foundation work
+- agent-facing contract work
+- deployment and orchestration-oriented notes
+
+Potential upstream candidates are usually:
+- focused lifecycle fixes
+- safer editor-tool implementations
+- general-purpose result and error-contract improvements
+
 ## License
 
 Please refer to the upstream repository and local license files for licensing details.
