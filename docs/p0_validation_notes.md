@@ -185,6 +185,9 @@ Confirmed contract behavior:
 - health tools now expose `session_ready`
 - scene/testbed and evidence-capture tools now return `risk_tier=editor-stateful`
 - session-disrupting map tools return `recommended_client_action=reconnect`
+- the first inferred core error codes are now validated:
+  - `map_unsaved`
+  - `map_not_found`
 
 Observed failure boundary:
 

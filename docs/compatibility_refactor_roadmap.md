@@ -232,6 +232,13 @@ Recommended first error-code set:
 - `invalid_arguments`
 - `session_disrupted`
 
+Current status:
+
+- the fork now infers the first core error codes at the Python contract layer
+- validated examples include:
+  - `map_unsaved`
+  - `map_not_found`
+
 ### P0.5-B: Contract normalization for existing P0 tools
 
 The current P0 tools still mix:

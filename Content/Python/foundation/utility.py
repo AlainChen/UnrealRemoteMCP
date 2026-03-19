@@ -138,11 +138,13 @@ def normalize_agent_result(
     }
     data = {k: v for k, v in raw.items() if k not in reserved}
 
+    error_code = raw.get("error_code") or infer_error_code(raw, message, reconnect_required)
+
     return {
         "ok": ok,
         "data": data,
         "warnings": list(raw.get("warnings", [])) if isinstance(raw.get("warnings", []), list) else [str(raw.get("warnings"))],
-        "error_code": raw.get("error_code"),
+        "error_code": error_code,
         "message": message,
         "risk_tier": risk_tier,
         "session_disrupted": session_disrupted,
@@ -173,5 +175,31 @@ def make_health_result(
         "reconnect_required": False,
         "recommended_client_action": recommended_client_action,
     }
+
+
+def infer_error_code(raw: dict, message: str, reconnect_required: bool) -> str | None:
+    if not message:
+        return "session_disrupted" if reconnect_required else None
+
+    lowered = message.lower()
+    if reconnect_required and ("restart" in lowered or "reconnect" in lowered):
+        return "session_disrupted"
+    if "missing '" in lowered or "must be provided" in lowered:
+        return "invalid_arguments"
+    if "already exists" in lowered:
+        if "map" in lowered:
+            return "map_already_exists"
+        return "already_exists"
+    if "not found" in lowered:
+        if "map" in lowered or "template map" in lowered:
+            return "map_not_found"
+        return "not_found"
+    if "current map path is empty" in lowered or "/temp/untitled" in lowered:
+        return "map_unsaved"
+    if "failed to get editor world" in lowered or "editor world" in lowered:
+        return "editor_state_error"
+    if reconnect_required:
+        return "session_disrupted"
+    return None
        
 
