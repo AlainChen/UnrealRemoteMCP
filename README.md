@@ -112,12 +112,47 @@ It is to add a small, stable foundation layer for automation.
   - `capture_viewport`
   - `capture_before_after`
 
+- agent-facing baseline semantics
+  - standardize the minimum result shape for current structured tools
+  - mark `risk_tier`
+  - mark `session_disrupted`
+  - mark `reconnect_required`
+
+- minimal health and reconnect tools
+  - `ping`
+  - `get_editor_state`
+  - `get_current_level`
+
+P0 is not finished when tools merely exist. It is finished when the current structured tool set is predictable enough for external agents to chain safely.
+
+### P0.5
+
+- core error codes for map / scene / capture paths
+- contract normalization across current P0 tools
+- better reconnect-oriented diagnostics
+
 ### P1
 
 - lighting rig and presets
 - post process wrappers
 - structured error taxonomy
 - task step logging and checkpoints
+
+## What Still Needs Work Right Now
+
+Even after the latest map-transition stabilization work, several important foundation items are still open:
+
+- current P0 tool results are not fully normalized yet
+- health/reconnect helpers are still missing
+- map-changing tools are stable as session-disrupting operations, but not yet seamless
+- `save_map_as` still needs better handling for unnamed temporary maps
+- scene/testbed tools should be revalidated as a group under repeated chained use
+
+The next recommended sequence is:
+
+1. finish P0 contract and health semantics
+2. add core error codes and result normalization
+3. only then move deeper into lighting presets and higher-level gym tooling
 
 ## Deployment Vision
 

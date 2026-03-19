@@ -110,6 +110,14 @@ Those can later live in an outer control layer while this plugin focuses on edit
 
 ## P0 Roadmap
 
+P0 should cover only the minimum set required to make the current structured tools:
+
+- predictable for agents
+- safe enough for repeated use
+- recoverable after session-disrupting operations
+
+In practice, that means P0 is not just "add new tools". It also includes the first layer of contract and health semantics around those tools.
+
 ### P0-A: Map lifecycle
 
 - `create_blank_map`
@@ -147,13 +155,85 @@ The evidence-capture batch is intentionally lower risk than map lifecycle and sh
 
 These three areas form the minimum automation foundation.
 
+### P0-D: Agent-friendly contract baseline
+
+The current structured tools are useful, but not yet consistent enough for robust multi-agent orchestration.
+
+The minimum P0 contract layer should include:
+
+- a common result envelope for newly added or upgraded tools
+- explicit `risk_tier`
+- explicit `session_disrupted`
+- explicit `reconnect_required`
+- a minimal health baseline for reconnect-aware clients
+
+This is especially important for clients such as Codex, Cursor, Claude Code, or any outer orchestration service that cannot rely on implicit editor state.
+
+### P0-E: Minimal health and reconnect semantics
+
+P0 should also include the smallest health surface needed after session-disrupting operations:
+
+- `ping`
+- `get_editor_state`
+- `get_current_level`
+
+These tools do not need to be perfect at first. They need to be reliable enough to answer:
+
+- is the server alive?
+- is the editor available?
+- which map is currently active?
+- should the client reconnect or continue?
+
+## P0.5 Roadmap
+
+P0.5 is for improvements that are still close to the foundation layer, but are not strict blockers for today's validated workflows.
+
+### P0.5-A: Core error codes
+
+Introduce stable, small-scope error codes for the current P0 tools. Start with the highest-frequency paths only.
+
+Recommended first error-code set:
+
+- `map_not_found`
+- `map_already_exists`
+- `map_unsaved`
+- `editor_state_error`
+- `invalid_arguments`
+- `session_disrupted`
+
+### P0.5-B: Contract normalization for existing P0 tools
+
+The current P0 tools still mix:
+
+- `success`
+- `error`
+- action-specific payloads
+
+P0.5 should normalize them toward a single shape such as:
+
+```json
+{
+  "ok": true,
+  "data": {},
+  "warnings": [],
+  "error_code": null,
+  "message": "...",
+  "risk_tier": "safe | editor-stateful | session-disrupting",
+  "session_disrupted": false,
+  "reconnect_required": false
+}
+```
+
+This does not have to replace every legacy return path immediately, but new and upgraded P0 tools should converge on it.
+
 ## P1 Roadmap
 
 - lighting rig and readability presets
 - post process wrappers
-- structured error taxonomy
+- structured error taxonomy beyond the core P0 set
 - step logging
 - checkpoints or rollback-friendly save points
+- richer editor health and reconnect diagnostics
 
 ## P2 Roadmap
 
@@ -215,3 +295,24 @@ The right refactor path for this fork is:
 - prepare for cleaner outer orchestration later
 
 This produces a more modern and scalable system without forcing a risky full rewrite.
+
+## Current Practical Backlog
+
+Based on the current implementation and runtime validation, the next concrete work items should be:
+
+### Still inside P0
+
+- make the current P0 tools return more uniform agent-facing fields
+- add minimal health tools
+- document and enforce `session-disrupting` semantics consistently
+- validate the current scene and capture tools through repeated chained use
+
+### Immediately after P0
+
+- add core error codes for map / scene / capture paths
+- normalize tool result shapes across the current P0 set
+- prepare the first lighting/readability preset layer on top of the validated P0 foundation
+
+### Later
+
+- revisit seamless map-transition support only after health, reconnect, and contract behavior are stable
