@@ -1,5 +1,5 @@
 import json
-from typing import Any, Callable,Optional
+from typing import Any, Callable, Optional
 
 from mcp.types import TextContent
 import pydantic_core
@@ -93,5 +93,77 @@ def attach_logs_to_result(result: Any, logs: list[str]|str) -> Any:
                 }).decode()
             return [text_content_]
     return result
+
+
+def normalize_agent_result(
+    raw: dict,
+    *,
+    default_message: str = "",
+    default_risk_tier: str = "safe",
+    default_session_disrupted: bool = False,
+    default_reconnect_required: bool = False,
+) -> dict:
+    """Normalize C++ tool output into a more agent-friendly envelope.
+
+    The current bridge still carries legacy fields such as `success` / `error`.
+    This helper preserves those fields while adding a stable outer shape that is
+    easier for external agents to reason about.
+    """
+    if raw is None:
+        raw = {}
+
+    ok = bool(raw.get("success", "error" not in raw))
+    error_message = str(raw.get("error", "")).strip()
+    message = error_message or str(raw.get("message", "")).strip() or default_message
+    session_disrupted = bool(raw.get("session_disrupted", default_session_disrupted))
+    reconnect_required = bool(raw.get("reconnect_required", default_reconnect_required or session_disrupted))
+    risk_tier = str(raw.get("risk_tier", default_risk_tier))
+
+    reserved = {
+        "success",
+        "error",
+        "message",
+        "risk_tier",
+        "session_disrupted",
+        "reconnect_required",
+        "warnings",
+        "error_code",
+        "ok",
+        "data",
+    }
+    data = {k: v for k, v in raw.items() if k not in reserved}
+
+    return {
+        "ok": ok,
+        "data": data,
+        "warnings": list(raw.get("warnings", [])) if isinstance(raw.get("warnings", []), list) else [str(raw.get("warnings"))],
+        "error_code": raw.get("error_code"),
+        "message": message,
+        "risk_tier": risk_tier,
+        "session_disrupted": session_disrupted,
+        "reconnect_required": reconnect_required,
+        # Keep legacy fields for compatibility while the fork transitions.
+        **raw,
+    }
+
+
+def make_health_result(
+    *,
+    ok: bool,
+    data: dict,
+    message: str,
+    warnings: list[str] | None = None,
+    error_code: str | None = None,
+) -> dict:
+    return {
+        "ok": ok,
+        "data": data,
+        "warnings": warnings or [],
+        "error_code": error_code,
+        "message": message,
+        "risk_tier": "safe",
+        "session_disrupted": False,
+        "reconnect_required": False,
+    }
        
 

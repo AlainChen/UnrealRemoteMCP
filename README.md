@@ -61,6 +61,45 @@ The preferred evolution path is:
 4. reduce reliance on long editor Python scripts
 5. move heavier orchestration concerns out of the plugin later
 
+## AI Usage Modes
+
+This fork should not be designed only for fully autonomous agents.
+
+In practical Unreal workflows, AI is typically used across several different modes:
+
+1. advisory / read-only analysis
+   - inspect the current level
+   - explain assets, actors, blueprints, or editor state
+   - help humans reason about next steps without changing anything
+
+2. sandbox prototyping
+   - create or modify assets in isolated test areas
+   - generate gym/testbed content
+   - capture before/after evidence with low production risk
+
+3. restricted co-building
+   - allow bounded changes inside clearly scoped areas
+   - rely on explicit contracts, reconnect semantics, and repeatable validation
+
+4. workflow-node automation
+   - run preflight checks
+   - gather state and evidence
+   - prepare artifacts for review and later automation layers
+
+5. high-privilege maintenance
+   - powerful editor-changing operations
+   - should remain rare, explicit, and policy-controlled
+
+P0 in this fork mainly supports:
+
+- advisory / read-only analysis
+- workflow-node automation
+- sandbox prototyping
+
+Restricted co-building becomes more realistic after the contract, error, and reconnect layers are stronger.
+
+High-privilege maintenance should remain out of scope until the plugin has much clearer safety and lifecycle guarantees.
+
 ## Why This Fork Exists
 
 The original project already provides a strong base:

@@ -39,6 +39,37 @@ to:
 
 while preserving enough compatibility that current workflows can keep operating.
 
+## AI Interaction Modes
+
+The plugin should support more than one style of AI usage.
+
+For planning purposes, use these five modes:
+
+1. advisory / read-only
+2. sandbox prototyping
+3. restricted co-building
+4. workflow-node automation
+5. high-privilege maintenance
+
+These modes matter because they imply different expectations:
+
+- read-only analysis prioritizes safe state inspection
+- sandbox prototyping prioritizes isolated creation and evidence capture
+- restricted co-building prioritizes bounded write operations and predictable contracts
+- workflow-node automation prioritizes health, reconnect, and artifact collection
+- high-privilege maintenance prioritizes explicit risk handling and policy controls
+
+The current refactor should optimize first for:
+
+- advisory / read-only
+- workflow-node automation
+- sandbox prototyping
+
+The later phases should progressively improve support for:
+
+- restricted co-building
+- eventually high-privilege maintenance
+
 ## What Must Stay Compatible
 
 The following should keep working during the transition:

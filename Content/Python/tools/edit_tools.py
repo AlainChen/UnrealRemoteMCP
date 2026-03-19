@@ -4,7 +4,7 @@ from mcp.server.fastmcp import Context
 import unreal
 
 import foundation.utility as unreal_utility
-from foundation.utility import call_cpp_tools
+from foundation.utility import call_cpp_tools, normalize_agent_result
 
 
 
@@ -300,12 +300,21 @@ def register_edit_tool( mcp:UnrealMCP):
         params = {
             "map_path": map_path,
         }
-        return call_cpp_tools(unreal.MCPEditorTools.handle_load_map, params)
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_load_map, params),
+            default_message="Map load requested.",
+            default_risk_tier="session-disrupting",
+            default_session_disrupted=True,
+            default_reconnect_required=True,
+        )
 
     @mcp.domain_tool("level")
     def save_current_map(ctx: Context) -> Dict[str, Any]:
         """Save the currently active editor level."""
-        return call_cpp_tools(unreal.MCPEditorTools.handle_save_current_map, {})
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_save_current_map, {}),
+            default_message="Current map saved.",
+        )
 
     @mcp.domain_tool("level")
     def save_map_as(ctx: Context, target_map_path: str) -> Dict[str, Any]:
@@ -317,7 +326,10 @@ def register_edit_tool( mcp:UnrealMCP):
         params = {
             "target_map_path": target_map_path,
         }
-        return call_cpp_tools(unreal.MCPEditorTools.handle_save_map_as, params)
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_save_map_as, params),
+            default_message="Save-as request completed.",
+        )
 
     @mcp.domain_tool("level")
     def create_blank_map(ctx: Context, map_path: str) -> Dict[str, Any]:
@@ -329,7 +341,13 @@ def register_edit_tool( mcp:UnrealMCP):
         params = {
             "map_path": map_path,
         }
-        return call_cpp_tools(unreal.MCPEditorTools.handle_create_blank_map, params)
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_create_blank_map, params),
+            default_message="Blank map created.",
+            default_risk_tier="session-disrupting",
+            default_session_disrupted=True,
+            default_reconnect_required=True,
+        )
 
     @mcp.domain_tool("level")
     def create_map_from_template(
@@ -346,7 +364,13 @@ def register_edit_tool( mcp:UnrealMCP):
             "map_path": map_path,
             "template_map_path": template_map_path,
         }
-        return call_cpp_tools(unreal.MCPEditorTools.handle_create_map_from_template, params)
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_create_map_from_template, params),
+            default_message="Map created from template.",
+            default_risk_tier="session-disrupting",
+            default_session_disrupted=True,
+            default_reconnect_required=True,
+        )
 
     @mcp.domain_tool("level")
     def spawn_static_mesh_actor(
@@ -365,7 +389,10 @@ def register_edit_tool( mcp:UnrealMCP):
             "rotation": rotation,
             "scale": scale,
         }
-        return call_cpp_tools(unreal.MCPEditorTools.handle_spawn_static_mesh_actor, params)
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_spawn_static_mesh_actor, params),
+            default_message="Static mesh actor spawned.",
+        )
 
     @mcp.domain_tool("level")
     def find_actors_by_prefix(ctx: Context, prefix: str) -> Dict[str, Any]:
@@ -373,7 +400,10 @@ def register_edit_tool( mcp:UnrealMCP):
         params = {
             "prefix": prefix,
         }
-        return call_cpp_tools(unreal.MCPEditorTools.handle_find_actors_by_prefix, params)
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_find_actors_by_prefix, params),
+            default_message="Actor prefix lookup completed.",
+        )
 
     @mcp.domain_tool("level")
     def delete_actors_by_prefix(ctx: Context, prefix: str) -> Dict[str, Any]:
@@ -381,7 +411,10 @@ def register_edit_tool( mcp:UnrealMCP):
         params = {
             "prefix": prefix,
         }
-        return call_cpp_tools(unreal.MCPEditorTools.handle_delete_actors_by_prefix, params)
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_delete_actors_by_prefix, params),
+            default_message="Actors deleted by prefix.",
+        )
 
     @mcp.domain_tool("level")
     def reset_testbed(ctx: Context, prefix: str) -> Dict[str, Any]:
@@ -389,7 +422,10 @@ def register_edit_tool( mcp:UnrealMCP):
         params = {
             "prefix": prefix,
         }
-        return call_cpp_tools(unreal.MCPEditorTools.handle_reset_testbed, params)
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_reset_testbed, params),
+            default_message="Testbed reset completed.",
+        )
 
     @mcp.domain_tool("level")
     def ensure_capture_camera(
@@ -404,7 +440,10 @@ def register_edit_tool( mcp:UnrealMCP):
             "location": location,
             "rotation": rotation,
         }
-        return call_cpp_tools(unreal.MCPEditorTools.handle_ensure_capture_camera, params)
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_ensure_capture_camera, params),
+            default_message="Capture camera ensured.",
+        )
 
     @mcp.domain_tool("level")
     def set_editor_camera(
@@ -419,7 +458,10 @@ def register_edit_tool( mcp:UnrealMCP):
             "orientation": orientation,
             "distance": distance,
         }
-        return call_cpp_tools(unreal.MCPEditorTools.handle_focus_viewport, params)
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_focus_viewport, params),
+            default_message="Editor camera updated.",
+        )
 
     @mcp.domain_tool("level")
     def capture_viewport(ctx: Context, filepath: str) -> Dict[str, Any]:
@@ -427,7 +469,10 @@ def register_edit_tool( mcp:UnrealMCP):
         params = {
             "filepath": filepath,
         }
-        return call_cpp_tools(unreal.MCPEditorTools.handle_take_screenshot, params)
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_take_screenshot, params),
+            default_message="Viewport captured.",
+        )
 
     @mcp.domain_tool("level")
     def capture_before_after(
@@ -464,7 +509,7 @@ def register_edit_tool( mcp:UnrealMCP):
             })
             if not before_result.get("success", True):
                 result["success"] = False
-                return result
+                return normalize_agent_result(result, default_message="Before/after capture failed during before focus.")
 
         before_capture = call_cpp_tools(
             unreal.MCPEditorTools.handle_take_screenshot,
@@ -476,7 +521,7 @@ def register_edit_tool( mcp:UnrealMCP):
         })
         if not before_capture.get("success", True):
             result["success"] = False
-            return result
+            return normalize_agent_result(result, default_message="Before/after capture failed during before capture.")
 
         if after_location is not None and after_orientation is not None:
             after_focus = call_cpp_tools(
@@ -493,7 +538,7 @@ def register_edit_tool( mcp:UnrealMCP):
             })
             if not after_focus.get("success", True):
                 result["success"] = False
-                return result
+                return normalize_agent_result(result, default_message="Before/after capture failed during after focus.")
 
         after_capture = call_cpp_tools(
             unreal.MCPEditorTools.handle_take_screenshot,
@@ -505,11 +550,11 @@ def register_edit_tool( mcp:UnrealMCP):
         })
         if not after_capture.get("success", True):
             result["success"] = False
-            return result
+            return normalize_agent_result(result, default_message="Before/after capture failed during after capture.")
 
         result["before_path"] = before_capture.get("filepath", before_path)
         result["after_path"] = after_capture.get("filepath", after_path)
-        return result
+        return normalize_agent_result(result, default_message="Before/after capture completed.")
 
     @mcp.domain_tool("level")
     def set_actor_property(

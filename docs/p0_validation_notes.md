@@ -8,6 +8,11 @@ It is intentionally lightweight and practical.
 
 Current implemented batches:
 
+- health and reconnect baseline
+  - `ping`
+  - `get_editor_state`
+  - `get_current_level`
+
 - map lifecycle
   - `load_map`
   - `save_current_map`
@@ -34,6 +39,23 @@ Each tool should be validated in three layers where possible:
 1. registration
 2. execution
 3. practical chained use
+
+## Health Validation
+
+### `ping`
+
+- returns a stable lightweight health response
+- can be used by external agents before attempting structured tool calls
+
+### `get_editor_state`
+
+- returns a minimal reconnect-oriented editor snapshot
+- includes current level, actor count, and MCP port
+
+### `get_current_level`
+
+- returns the active editor level path/name
+- remains valid as a post-reconnect sanity check
 
 ## Batch 1 Validation
 
@@ -118,6 +140,9 @@ The first two P0 batches have now been runtime-validated inside Unreal 5.7 on th
 
 Confirmed working:
 
+- `ping`
+- `get_editor_state`
+- `get_current_level`
 - `create_blank_map`
 - `spawn_static_mesh_actor`
 - `ensure_capture_camera`
@@ -151,10 +176,12 @@ Observed environment notes:
 Current status should be treated as:
 
 - implemented
+- runtime-validated for the health baseline
 - runtime-validated for the first practical chain
 - runtime-validated for most of the second chain
 - runtime-validated for the P0 evidence-capture batch
 - runtime-validated for session-disrupting `create_blank_map`
 - runtime-validated for session-disrupting `load_map`
 - still blocked on seamless map-transition support
+- partially normalized for agent-facing contracts at the Python wrapper layer
 - ready to use evidence capture as the preferred low-risk baseline path
