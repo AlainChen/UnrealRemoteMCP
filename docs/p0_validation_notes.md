@@ -51,11 +51,35 @@ Each tool should be validated in three layers where possible:
 
 - returns a minimal reconnect-oriented editor snapshot
 - includes current level, actor count, and MCP port
+- includes `session_ready`
+- can be used by clients to decide whether they should continue or reconnect
 
 ### `get_current_level`
 
 - returns the active editor level path/name
 - remains valid as a post-reconnect sanity check
+- includes `session_ready`
+
+## Agent-Facing Contract Baseline
+
+The current P0 wrappers now expose a minimum agent-facing contract:
+
+- `ok`
+- `data`
+- `warnings`
+- `error_code`
+- `message`
+- `risk_tier`
+- `session_disrupted`
+- `reconnect_required`
+- `recommended_client_action`
+
+Compatibility note:
+
+- legacy fields such as `success`, action-specific payload fields, and `error`
+  are still preserved for now
+- the new fields should be treated as the preferred contract for reconnect-aware
+  agents
 
 ## Batch 1 Validation
 
@@ -154,6 +178,13 @@ Confirmed working:
 - `set_editor_camera`
 - `capture_viewport`
 - `capture_before_after`
+
+Confirmed contract behavior:
+
+- health tools now return `recommended_client_action`
+- health tools now expose `session_ready`
+- scene/testbed and evidence-capture tools now return `risk_tier=editor-stateful`
+- session-disrupting map tools return `recommended_client_action=reconnect`
 
 Observed failure boundary:
 

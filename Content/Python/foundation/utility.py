@@ -118,6 +118,10 @@ def normalize_agent_result(
     session_disrupted = bool(raw.get("session_disrupted", default_session_disrupted))
     reconnect_required = bool(raw.get("reconnect_required", default_reconnect_required or session_disrupted))
     risk_tier = str(raw.get("risk_tier", default_risk_tier))
+    recommended_client_action = raw.get(
+        "recommended_client_action",
+        "reconnect" if reconnect_required else "continue",
+    )
 
     reserved = {
         "success",
@@ -130,6 +134,7 @@ def normalize_agent_result(
         "error_code",
         "ok",
         "data",
+        "recommended_client_action",
     }
     data = {k: v for k, v in raw.items() if k not in reserved}
 
@@ -142,6 +147,7 @@ def normalize_agent_result(
         "risk_tier": risk_tier,
         "session_disrupted": session_disrupted,
         "reconnect_required": reconnect_required,
+        "recommended_client_action": recommended_client_action,
         # Keep legacy fields for compatibility while the fork transitions.
         **raw,
     }
@@ -154,6 +160,7 @@ def make_health_result(
     message: str,
     warnings: list[str] | None = None,
     error_code: str | None = None,
+    recommended_client_action: str = "continue",
 ) -> dict:
     return {
         "ok": ok,
@@ -164,6 +171,7 @@ def make_health_result(
         "risk_tier": "safe",
         "session_disrupted": False,
         "reconnect_required": False,
+        "recommended_client_action": recommended_client_action,
     }
        
 

@@ -314,6 +314,7 @@ def register_edit_tool( mcp:UnrealMCP):
         return normalize_agent_result(
             call_cpp_tools(unreal.MCPEditorTools.handle_save_current_map, {}),
             default_message="Current map saved.",
+            default_risk_tier="editor-stateful",
         )
 
     @mcp.domain_tool("level")
@@ -329,6 +330,9 @@ def register_edit_tool( mcp:UnrealMCP):
         return normalize_agent_result(
             call_cpp_tools(unreal.MCPEditorTools.handle_save_map_as, params),
             default_message="Save-as request completed.",
+            default_risk_tier="session-disrupting",
+            default_session_disrupted=True,
+            default_reconnect_required=True,
         )
 
     @mcp.domain_tool("level")
@@ -392,6 +396,7 @@ def register_edit_tool( mcp:UnrealMCP):
         return normalize_agent_result(
             call_cpp_tools(unreal.MCPEditorTools.handle_spawn_static_mesh_actor, params),
             default_message="Static mesh actor spawned.",
+            default_risk_tier="editor-stateful",
         )
 
     @mcp.domain_tool("level")
@@ -403,6 +408,7 @@ def register_edit_tool( mcp:UnrealMCP):
         return normalize_agent_result(
             call_cpp_tools(unreal.MCPEditorTools.handle_find_actors_by_prefix, params),
             default_message="Actor prefix lookup completed.",
+            default_risk_tier="editor-stateful",
         )
 
     @mcp.domain_tool("level")
@@ -414,6 +420,7 @@ def register_edit_tool( mcp:UnrealMCP):
         return normalize_agent_result(
             call_cpp_tools(unreal.MCPEditorTools.handle_delete_actors_by_prefix, params),
             default_message="Actors deleted by prefix.",
+            default_risk_tier="editor-stateful",
         )
 
     @mcp.domain_tool("level")
@@ -425,6 +432,7 @@ def register_edit_tool( mcp:UnrealMCP):
         return normalize_agent_result(
             call_cpp_tools(unreal.MCPEditorTools.handle_reset_testbed, params),
             default_message="Testbed reset completed.",
+            default_risk_tier="editor-stateful",
         )
 
     @mcp.domain_tool("level")
@@ -443,6 +451,7 @@ def register_edit_tool( mcp:UnrealMCP):
         return normalize_agent_result(
             call_cpp_tools(unreal.MCPEditorTools.handle_ensure_capture_camera, params),
             default_message="Capture camera ensured.",
+            default_risk_tier="editor-stateful",
         )
 
     @mcp.domain_tool("level")
@@ -461,6 +470,7 @@ def register_edit_tool( mcp:UnrealMCP):
         return normalize_agent_result(
             call_cpp_tools(unreal.MCPEditorTools.handle_focus_viewport, params),
             default_message="Editor camera updated.",
+            default_risk_tier="editor-stateful",
         )
 
     @mcp.domain_tool("level")
@@ -472,6 +482,7 @@ def register_edit_tool( mcp:UnrealMCP):
         return normalize_agent_result(
             call_cpp_tools(unreal.MCPEditorTools.handle_take_screenshot, params),
             default_message="Viewport captured.",
+            default_risk_tier="editor-stateful",
         )
 
     @mcp.domain_tool("level")
@@ -509,7 +520,11 @@ def register_edit_tool( mcp:UnrealMCP):
             })
             if not before_result.get("success", True):
                 result["success"] = False
-                return normalize_agent_result(result, default_message="Before/after capture failed during before focus.")
+                return normalize_agent_result(
+                    result,
+                    default_message="Before/after capture failed during before focus.",
+                    default_risk_tier="editor-stateful",
+                )
 
         before_capture = call_cpp_tools(
             unreal.MCPEditorTools.handle_take_screenshot,
@@ -521,7 +536,11 @@ def register_edit_tool( mcp:UnrealMCP):
         })
         if not before_capture.get("success", True):
             result["success"] = False
-            return normalize_agent_result(result, default_message="Before/after capture failed during before capture.")
+            return normalize_agent_result(
+                result,
+                default_message="Before/after capture failed during before capture.",
+                default_risk_tier="editor-stateful",
+            )
 
         if after_location is not None and after_orientation is not None:
             after_focus = call_cpp_tools(
@@ -538,7 +557,11 @@ def register_edit_tool( mcp:UnrealMCP):
             })
             if not after_focus.get("success", True):
                 result["success"] = False
-                return normalize_agent_result(result, default_message="Before/after capture failed during after focus.")
+                return normalize_agent_result(
+                    result,
+                    default_message="Before/after capture failed during after focus.",
+                    default_risk_tier="editor-stateful",
+                )
 
         after_capture = call_cpp_tools(
             unreal.MCPEditorTools.handle_take_screenshot,
@@ -550,11 +573,19 @@ def register_edit_tool( mcp:UnrealMCP):
         })
         if not after_capture.get("success", True):
             result["success"] = False
-            return normalize_agent_result(result, default_message="Before/after capture failed during after capture.")
+            return normalize_agent_result(
+                result,
+                default_message="Before/after capture failed during after capture.",
+                default_risk_tier="editor-stateful",
+            )
 
         result["before_path"] = before_capture.get("filepath", before_path)
         result["after_path"] = after_capture.get("filepath", after_path)
-        return normalize_agent_result(result, default_message="Before/after capture completed.")
+        return normalize_agent_result(
+            result,
+            default_message="Before/after capture completed.",
+            default_risk_tier="editor-stateful",
+        )
 
     @mcp.domain_tool("level")
     def set_actor_property(

@@ -39,10 +39,12 @@ def register_common_tools(mcp : UnrealMCP):
                     "current_level": package_name or level_name or "unknown",
                     "world_name": level_name,
                     "editor_world_available": world is not None,
+                    "session_ready": world is not None,
                 },
                 message="Current editor level resolved." if world else "Editor world is not available.",
                 warnings=[] if world else ["editor_world_unavailable"],
                 error_code=None if world else "editor_state_error",
+                recommended_client_action="continue" if world else "reconnect",
             )
         except Exception as e:
             return make_health_result(
@@ -50,6 +52,7 @@ def register_common_tools(mcp : UnrealMCP):
                 data={},
                 message=f"Failed to resolve current level: {e}",
                 error_code="editor_state_error",
+                recommended_client_action="reconnect",
             )
 
     @mcp.game_thread_tool()
@@ -86,10 +89,12 @@ def register_common_tools(mcp : UnrealMCP):
                     "world_name": world_name,
                     "actor_count": actor_count,
                     "mcp_port": port,
+                    "session_ready": world is not None,
                 },
                 message="Editor state resolved." if world else "Editor world is not available.",
                 warnings=[] if world else ["editor_world_unavailable"],
                 error_code=None if world else "editor_state_error",
+                recommended_client_action="continue" if world else "reconnect",
             )
         except Exception as e:
             return make_health_result(
@@ -97,6 +102,7 @@ def register_common_tools(mcp : UnrealMCP):
                 data={},
                 message=f"Failed to inspect editor state: {e}",
                 error_code="editor_state_error",
+                recommended_client_action="reconnect",
             )
 
     @mcp.game_thread_tool()
