@@ -238,6 +238,9 @@ Current status:
 - validated examples include:
   - `map_unsaved`
   - `map_not_found`
+  - `map_already_exists`
+- schema-level missing-argument failures can still be raised by FastMCP /
+  Pydantic before control reaches the wrapper layer
 
 ### P0.5-B: Contract normalization for existing P0 tools
 

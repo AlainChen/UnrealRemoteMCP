@@ -188,6 +188,9 @@ Confirmed contract behavior:
 - the first inferred core error codes are now validated:
   - `map_unsaved`
   - `map_not_found`
+  - `map_already_exists`
+- missing required parameters currently fail at the FastMCP / Pydantic schema
+  layer before the wrapper can normalize them into `invalid_arguments`
 
 Observed failure boundary:
 
