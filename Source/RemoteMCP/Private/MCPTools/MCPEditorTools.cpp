@@ -1089,7 +1089,6 @@ FJsonObjectParameter UMCPEditorTools::HandleSpawnStaticMeshActor(const FJsonObje
     }
 
     FActorSpawnParameters SpawnParams;
-    SpawnParams.Name = *ActorName;
     AStaticMeshActor* NewActor = World->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), Location, Rotation, SpawnParams);
     if (!NewActor)
     {

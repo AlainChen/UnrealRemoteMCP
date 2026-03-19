@@ -83,6 +83,16 @@ Why this matters:
 - human-readable camera and Gym object names are easier to reuse across runs
 - editor workflows often reason about labels rather than internal object names
 
+### 6. Static mesh spawning is safer under repeated runs
+
+`spawn_static_mesh_actor` no longer forces the Unreal object name at spawn time.
+
+Why this matters:
+- repeated Gym runs can otherwise hit fatal same-name collisions inside the
+  current level package
+- using label-oriented lookup semantics is safer for baseline automation than
+  forcing object-name uniqueness at spawn time
+
 ## Practical Validation Impact
 
 These fixes directly supported:
