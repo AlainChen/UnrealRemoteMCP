@@ -455,6 +455,211 @@ def register_edit_tool( mcp:UnrealMCP):
         )
 
     @mcp.domain_tool("level")
+    def find_lighting_rig(ctx: Context) -> Dict[str, Any]:
+        """Inspect the current level for the minimum lighting rig actors."""
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_find_lighting_rig, {}),
+            default_message="Lighting rig lookup completed.",
+            default_risk_tier="editor-stateful",
+        )
+
+    @mcp.domain_tool("level")
+    def ensure_basic_lighting_rig(
+        ctx: Context,
+        prefix: str = "GymLight",
+        directional_light_name: Optional[str] = None,
+        sky_light_name: Optional[str] = None,
+        fog_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create or reuse a minimal lighting rig for baseline gym tasks."""
+        params: Dict[str, Any] = {"prefix": prefix}
+        if directional_light_name is not None:
+            params["directional_light_name"] = directional_light_name
+        if sky_light_name is not None:
+            params["sky_light_name"] = sky_light_name
+        if fog_name is not None:
+            params["fog_name"] = fog_name
+
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_ensure_basic_lighting_rig, params),
+            default_message="Basic lighting rig ensured.",
+            default_risk_tier="editor-stateful",
+        )
+
+    @mcp.domain_tool("level")
+    def set_directional_light(
+        ctx: Context,
+        name: str,
+        intensity: Optional[float] = None,
+        light_color: Optional[List[float]] = None,
+        temperature: Optional[float] = None,
+        indirect_intensity: Optional[float] = None,
+        source_angle: Optional[float] = None,
+        rotation: Optional[List[float]] = None,
+    ) -> Dict[str, Any]:
+        """Set common directional-light properties."""
+        params: Dict[str, Any] = {"name": name}
+        if intensity is not None:
+            params["intensity"] = intensity
+        if light_color is not None:
+            params["light_color"] = light_color
+        if temperature is not None:
+            params["temperature"] = temperature
+        if indirect_intensity is not None:
+            params["indirect_intensity"] = indirect_intensity
+        if source_angle is not None:
+            params["source_angle"] = source_angle
+        if rotation is not None:
+            params["rotation"] = rotation
+
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_set_directional_light, params),
+            default_message="Directional light updated.",
+            default_risk_tier="editor-stateful",
+        )
+
+    @mcp.domain_tool("level")
+    def set_skylight(
+        ctx: Context,
+        name: str,
+        intensity: Optional[float] = None,
+        light_color: Optional[List[float]] = None,
+    ) -> Dict[str, Any]:
+        """Set common skylight properties."""
+        params: Dict[str, Any] = {"name": name}
+        if intensity is not None:
+            params["intensity"] = intensity
+        if light_color is not None:
+            params["light_color"] = light_color
+
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_set_sky_light, params),
+            default_message="Sky light updated.",
+            default_risk_tier="editor-stateful",
+        )
+
+    @mcp.domain_tool("level")
+    def set_exponential_height_fog(
+        ctx: Context,
+        name: str,
+        fog_density: Optional[float] = None,
+        fog_height_falloff: Optional[float] = None,
+        start_distance: Optional[float] = None,
+        fog_inscattering_color: Optional[List[float]] = None,
+    ) -> Dict[str, Any]:
+        """Set common exponential-height-fog properties."""
+        params: Dict[str, Any] = {"name": name}
+        if fog_density is not None:
+            params["fog_density"] = fog_density
+        if fog_height_falloff is not None:
+            params["fog_height_falloff"] = fog_height_falloff
+        if start_distance is not None:
+            params["start_distance"] = start_distance
+        if fog_inscattering_color is not None:
+            params["fog_inscattering_color"] = fog_inscattering_color
+
+        return normalize_agent_result(
+            call_cpp_tools(unreal.MCPEditorTools.handle_set_exponential_height_fog, params),
+            default_message="Exponential height fog updated.",
+            default_risk_tier="editor-stateful",
+        )
+
+    @mcp.domain_tool("level")
+    def apply_time_of_day_preset(
+        ctx: Context,
+        preset_name: str,
+        prefix: str = "GymLight",
+    ) -> Dict[str, Any]:
+        """Apply a small baseline lighting preset over the ensured rig."""
+        presets: Dict[str, Dict[str, Any]] = {
+            "neutral_day": {
+                "directional": {"intensity": 8.0, "temperature": 6500.0, "rotation": [-35.0, 35.0, 0.0], "source_angle": 0.8},
+                "sky": {"intensity": 1.0},
+                "fog": {"fog_density": 0.005, "fog_height_falloff": 0.2, "start_distance": 0.0, "fog_inscattering_color": [0.85, 0.9, 1.0]},
+            },
+            "golden_hour": {
+                "directional": {"intensity": 6.0, "temperature": 4200.0, "rotation": [-8.0, 18.0, 0.0], "source_angle": 1.5},
+                "sky": {"intensity": 0.7, "light_color": [1.0, 0.92, 0.8]},
+                "fog": {"fog_density": 0.02, "fog_height_falloff": 0.15, "start_distance": 0.0, "fog_inscattering_color": [1.0, 0.78, 0.58]},
+            },
+            "cool_overcast": {
+                "directional": {"intensity": 3.0, "temperature": 8000.0, "rotation": [-55.0, 25.0, 0.0], "source_angle": 3.0},
+                "sky": {"intensity": 1.4, "light_color": [0.78, 0.84, 0.95]},
+                "fog": {"fog_density": 0.03, "fog_height_falloff": 0.1, "start_distance": 0.0, "fog_inscattering_color": [0.72, 0.8, 0.92]},
+            },
+            "night_focal": {
+                "directional": {"intensity": 0.8, "temperature": 9000.0, "rotation": [-20.0, -35.0, 0.0], "source_angle": 0.6},
+                "sky": {"intensity": 0.25, "light_color": [0.35, 0.42, 0.6]},
+                "fog": {"fog_density": 0.045, "fog_height_falloff": 0.08, "start_distance": 0.0, "fog_inscattering_color": [0.12, 0.18, 0.28]},
+            },
+        }
+
+        preset = presets.get(preset_name)
+        if preset is None:
+            return normalize_agent_result(
+                {"success": False, "error": f"Unknown lighting preset: {preset_name}"},
+                default_message="Lighting preset application failed.",
+                default_risk_tier="editor-stateful",
+            )
+
+        ensure_result = ensure_basic_lighting_rig(
+            ctx,
+            prefix=prefix,
+            directional_light_name=f"{prefix}_DirectionalLight",
+            sky_light_name=f"{prefix}_SkyLight",
+            fog_name=f"{prefix}_ExponentialHeightFog",
+        )
+        if not ensure_result.get("ok", False):
+            return ensure_result
+
+        rig_data = ensure_result.get("data", {})
+        directional = rig_data.get("directional_light", {})
+        skylight = rig_data.get("sky_light", {})
+        fog = rig_data.get("exponential_height_fog", {})
+
+        steps: List[Dict[str, Any]] = [{"step": "ensure_basic_lighting_rig", "result": ensure_result}]
+
+        directional_result = set_directional_light(ctx, name=directional.get("name", f"{prefix}_DirectionalLight"), **preset["directional"])
+        steps.append({"step": "set_directional_light", "result": directional_result})
+        if not directional_result.get("ok", False):
+            return normalize_agent_result(
+                {"success": False, "error": directional_result.get("message", "Directional light update failed."), "steps": steps},
+                default_message="Lighting preset application failed.",
+                default_risk_tier="editor-stateful",
+            )
+
+        skylight_result = set_skylight(ctx, name=skylight.get("name", f"{prefix}_SkyLight"), **preset["sky"])
+        steps.append({"step": "set_skylight", "result": skylight_result})
+        if not skylight_result.get("ok", False):
+            return normalize_agent_result(
+                {"success": False, "error": skylight_result.get("message", "Sky light update failed."), "steps": steps},
+                default_message="Lighting preset application failed.",
+                default_risk_tier="editor-stateful",
+            )
+
+        fog_result = set_exponential_height_fog(ctx, name=fog.get("name", f"{prefix}_ExponentialHeightFog"), **preset["fog"])
+        steps.append({"step": "set_exponential_height_fog", "result": fog_result})
+        if not fog_result.get("ok", False):
+            return normalize_agent_result(
+                {"success": False, "error": fog_result.get("message", "Exponential height fog update failed."), "steps": steps},
+                default_message="Lighting preset application failed.",
+                default_risk_tier="editor-stateful",
+            )
+
+        return normalize_agent_result(
+            {
+                "success": True,
+                "preset_name": preset_name,
+                "steps": steps,
+                "directional_light": directional_result.get("data", {}),
+                "sky_light": skylight_result.get("data", {}),
+                "exponential_height_fog": fog_result.get("data", {}),
+            },
+            default_message="Lighting preset applied.",
+            default_risk_tier="editor-stateful",
+        )
+
+    @mcp.domain_tool("level")
     def set_editor_camera(
         ctx: Context,
         location: List[float],

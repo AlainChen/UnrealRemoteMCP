@@ -10,6 +10,7 @@
 #include "ImageUtils.h"
 #include "HighResScreenshot.h"
 #include "Engine/GameViewportClient.h"
+#include "EngineUtils.h"
 #include "Misc/FileHelper.h"
 #include "GameFramework/Actor.h"
 #include "Engine/Selection.h"
@@ -17,9 +18,14 @@
 #include "Engine/StaticMeshActor.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/DirectionalLight.h"
+#include "Engine/SkyLight.h"
+#include "Engine/ExponentialHeightFog.h"
 #include "Engine/PointLight.h"
 #include "Engine/SpotLight.h"
 #include "Camera/CameraActor.h"
+#include "Components/DirectionalLightComponent.h"
+#include "Components/SkyLightComponent.h"
+#include "Components/ExponentialHeightFogComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "EditorSubsystem.h"
 #include "Subsystems/EditorActorSubsystem.h"
@@ -150,6 +156,60 @@ namespace
 #endif
 
         return false;
+    }
+
+    template<typename TActor>
+    TActor* FindFirstActorOfClass(UWorld* World)
+    {
+        if (!World)
+        {
+            return nullptr;
+        }
+
+        for (TActorIterator<TActor> It(World); It; ++It)
+        {
+            if (*It)
+            {
+                return *It;
+            }
+        }
+        return nullptr;
+    }
+
+    FLinearColor ParseLinearColorFromJson(const FJsonObjectParameter& Params, const FString& FieldName, const FLinearColor& DefaultValue)
+    {
+        if (!Params->HasField(FieldName))
+        {
+            return DefaultValue;
+        }
+
+        TSharedPtr<FJsonValue> ColorValue = Params->Values.FindRef(FieldName);
+        if (!ColorValue.IsValid() || ColorValue->Type != EJson::Array)
+        {
+            return DefaultValue;
+        }
+
+        const TArray<TSharedPtr<FJsonValue>>& Values = ColorValue->AsArray();
+        if (Values.Num() < 3)
+        {
+            return DefaultValue;
+        }
+
+        return FLinearColor(
+            Values[0]->AsNumber(),
+            Values[1]->AsNumber(),
+            Values[2]->AsNumber(),
+            Values.Num() > 3 ? Values[3]->AsNumber() : 1.0f);
+    }
+
+    TSharedPtr<FJsonObject> MakeActorSummary(AActor* Actor)
+    {
+        if (!Actor)
+        {
+            return nullptr;
+        }
+
+        return FUnrealMCPCommonUtils::ActorToJsonObject(Actor, true);
     }
 }
 
@@ -1079,6 +1139,268 @@ FJsonObjectParameter UMCPEditorTools::HandleEnsureCaptureCamera(const FJsonObjec
     FJsonObjectParameter ResultObj = FUnrealMCPCommonUtils::ActorToJsonObject(CameraActor, true);
     ResultObj->SetBoolField(TEXT("success"), true);
     ResultObj->SetStringField(TEXT("action"), TEXT("ensure_capture_camera"));
+    return ResultObj;
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleFindLightingRig(const FJsonObjectParameter& Params)
+{
+    UWorld* World = GetEditorWorldChecked();
+    if (!World)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    ADirectionalLight* DirectionalLight = FindFirstActorOfClass<ADirectionalLight>(World);
+    ASkyLight* SkyLight = FindFirstActorOfClass<ASkyLight>(World);
+    AExponentialHeightFog* HeightFog = FindFirstActorOfClass<AExponentialHeightFog>(World);
+
+    FJsonObjectParameter ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetBoolField(TEXT("success"), true);
+    ResultObj->SetStringField(TEXT("action"), TEXT("find_lighting_rig"));
+    ResultObj->SetBoolField(TEXT("has_directional_light"), DirectionalLight != nullptr);
+    ResultObj->SetBoolField(TEXT("has_sky_light"), SkyLight != nullptr);
+    ResultObj->SetBoolField(TEXT("has_exponential_height_fog"), HeightFog != nullptr);
+
+    if (DirectionalLight)
+    {
+        ResultObj->SetObjectField(TEXT("directional_light"), MakeActorSummary(DirectionalLight));
+    }
+    if (SkyLight)
+    {
+        ResultObj->SetObjectField(TEXT("sky_light"), MakeActorSummary(SkyLight));
+    }
+    if (HeightFog)
+    {
+        ResultObj->SetObjectField(TEXT("exponential_height_fog"), MakeActorSummary(HeightFog));
+    }
+
+    return ResultObj;
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleEnsureBasicLightingRig(const FJsonObjectParameter& Params)
+{
+    UWorld* World = GetEditorWorldChecked();
+    if (!World)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get editor world"));
+    }
+
+    FString Prefix = TEXT("GymLight");
+    Params->TryGetStringField(TEXT("prefix"), Prefix);
+
+    FString DirectionalLightName = Prefix + TEXT("_DirectionalLight");
+    FString SkyLightName = Prefix + TEXT("_SkyLight");
+    FString FogName = Prefix + TEXT("_ExponentialHeightFog");
+    Params->TryGetStringField(TEXT("directional_light_name"), DirectionalLightName);
+    Params->TryGetStringField(TEXT("sky_light_name"), SkyLightName);
+    Params->TryGetStringField(TEXT("fog_name"), FogName);
+
+    ADirectionalLight* DirectionalLight = Cast<ADirectionalLight>(FindActorByExactName(DirectionalLightName));
+    ASkyLight* SkyLight = Cast<ASkyLight>(FindActorByExactName(SkyLightName));
+    AExponentialHeightFog* HeightFog = Cast<AExponentialHeightFog>(FindActorByExactName(FogName));
+
+    if (!DirectionalLight)
+    {
+        FActorSpawnParameters SpawnParams;
+        SpawnParams.Name = *DirectionalLightName;
+        DirectionalLight = World->SpawnActor<ADirectionalLight>(
+            ADirectionalLight::StaticClass(),
+            FVector(-500.0f, -500.0f, 800.0f),
+            FRotator(-35.0f, 35.0f, 0.0f),
+            SpawnParams);
+        if (!DirectionalLight)
+        {
+            return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create directional light"));
+        }
+#if WITH_EDITOR
+        DirectionalLight->SetActorLabel(DirectionalLightName);
+#endif
+    }
+
+    if (!SkyLight)
+    {
+        FActorSpawnParameters SpawnParams;
+        SpawnParams.Name = *SkyLightName;
+        SkyLight = World->SpawnActor<ASkyLight>(
+            ASkyLight::StaticClass(),
+            FVector::ZeroVector,
+            FRotator::ZeroRotator,
+            SpawnParams);
+        if (!SkyLight)
+        {
+            return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create sky light"));
+        }
+#if WITH_EDITOR
+        SkyLight->SetActorLabel(SkyLightName);
+#endif
+    }
+
+    if (!HeightFog)
+    {
+        FActorSpawnParameters SpawnParams;
+        SpawnParams.Name = *FogName;
+        HeightFog = World->SpawnActor<AExponentialHeightFog>(
+            AExponentialHeightFog::StaticClass(),
+            FVector::ZeroVector,
+            FRotator::ZeroRotator,
+            SpawnParams);
+        if (!HeightFog)
+        {
+            return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to create exponential height fog"));
+        }
+#if WITH_EDITOR
+        HeightFog->SetActorLabel(FogName);
+#endif
+    }
+
+    FJsonObjectParameter ResultObj = MakeShared<FJsonObject>();
+    ResultObj->SetBoolField(TEXT("success"), true);
+    ResultObj->SetStringField(TEXT("action"), TEXT("ensure_basic_lighting_rig"));
+    ResultObj->SetObjectField(TEXT("directional_light"), MakeActorSummary(DirectionalLight));
+    ResultObj->SetObjectField(TEXT("sky_light"), MakeActorSummary(SkyLight));
+    ResultObj->SetObjectField(TEXT("exponential_height_fog"), MakeActorSummary(HeightFog));
+    return ResultObj;
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleSetDirectionalLight(const FJsonObjectParameter& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("name"), ActorName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'name' parameter"));
+    }
+
+    ADirectionalLight* LightActor = Cast<ADirectionalLight>(FindActorByExactName(ActorName));
+    if (!LightActor)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Directional light not found: %s"), *ActorName));
+    }
+
+    UDirectionalLightComponent* LightComponent = Cast<UDirectionalLightComponent>(LightActor->GetLightComponent());
+    if (!LightComponent)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to access directional light component"));
+    }
+
+    if (Params->HasField(TEXT("intensity")))
+    {
+        LightComponent->SetIntensity(Params->GetNumberField(TEXT("intensity")));
+    }
+    if (Params->HasField(TEXT("light_color")))
+    {
+        LightComponent->SetLightColor(ParseLinearColorFromJson(Params, TEXT("light_color"), FLinearColor::White));
+    }
+    if (Params->HasField(TEXT("temperature")))
+    {
+        LightComponent->bUseTemperature = true;
+        LightComponent->Temperature = Params->GetNumberField(TEXT("temperature"));
+    }
+    if (Params->HasField(TEXT("indirect_intensity")))
+    {
+        LightComponent->IndirectLightingIntensity = Params->GetNumberField(TEXT("indirect_intensity"));
+    }
+    if (Params->HasField(TEXT("source_angle")))
+    {
+        LightComponent->LightSourceAngle = Params->GetNumberField(TEXT("source_angle"));
+    }
+    if (Params->HasField(TEXT("rotation")))
+    {
+        LightActor->SetActorRotation(FUnrealMCPCommonUtils::GetRotatorFromJson(Params, TEXT("rotation")));
+    }
+
+    LightComponent->MarkRenderStateDirty();
+
+    FJsonObjectParameter ResultObj = FUnrealMCPCommonUtils::ActorToJsonObject(LightActor, true);
+    ResultObj->SetBoolField(TEXT("success"), true);
+    ResultObj->SetStringField(TEXT("action"), TEXT("set_directional_light"));
+    return ResultObj;
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleSetSkyLight(const FJsonObjectParameter& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("name"), ActorName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'name' parameter"));
+    }
+
+    ASkyLight* LightActor = Cast<ASkyLight>(FindActorByExactName(ActorName));
+    if (!LightActor)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Sky light not found: %s"), *ActorName));
+    }
+
+    USkyLightComponent* LightComponent = LightActor->GetLightComponent();
+    if (!LightComponent)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to access sky light component"));
+    }
+
+    if (Params->HasField(TEXT("intensity")))
+    {
+        LightComponent->SetIntensity(Params->GetNumberField(TEXT("intensity")));
+    }
+    if (Params->HasField(TEXT("light_color")))
+    {
+        LightComponent->SetLightColor(ParseLinearColorFromJson(Params, TEXT("light_color"), FLinearColor::White));
+    }
+
+    LightComponent->MarkRenderStateDirty();
+
+    FJsonObjectParameter ResultObj = FUnrealMCPCommonUtils::ActorToJsonObject(LightActor, true);
+    ResultObj->SetBoolField(TEXT("success"), true);
+    ResultObj->SetStringField(TEXT("action"), TEXT("set_sky_light"));
+    return ResultObj;
+}
+
+FJsonObjectParameter UMCPEditorTools::HandleSetExponentialHeightFog(const FJsonObjectParameter& Params)
+{
+    FString ActorName;
+    if (!Params->TryGetStringField(TEXT("name"), ActorName))
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'name' parameter"));
+    }
+
+    AExponentialHeightFog* FogActor = Cast<AExponentialHeightFog>(FindActorByExactName(ActorName));
+    if (!FogActor)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(
+            FString::Printf(TEXT("Exponential height fog not found: %s"), *ActorName));
+    }
+
+    UExponentialHeightFogComponent* FogComponent = FogActor->FindComponentByClass<UExponentialHeightFogComponent>();
+    if (!FogComponent)
+    {
+        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to access exponential height fog component"));
+    }
+
+    if (Params->HasField(TEXT("fog_density")))
+    {
+        FogComponent->FogDensity = Params->GetNumberField(TEXT("fog_density"));
+    }
+    if (Params->HasField(TEXT("fog_height_falloff")))
+    {
+        FogComponent->FogHeightFalloff = Params->GetNumberField(TEXT("fog_height_falloff"));
+    }
+    if (Params->HasField(TEXT("start_distance")))
+    {
+        FogComponent->StartDistance = Params->GetNumberField(TEXT("start_distance"));
+    }
+    if (Params->HasField(TEXT("fog_inscattering_color")))
+    {
+        FogComponent->SetFogInscatteringColor(ParseLinearColorFromJson(
+            Params,
+            TEXT("fog_inscattering_color"),
+            FogComponent->FogInscatteringLuminance));
+    }
+
+    FogComponent->MarkRenderStateDirty();
+
+    FJsonObjectParameter ResultObj = FUnrealMCPCommonUtils::ActorToJsonObject(FogActor, true);
+    ResultObj->SetBoolField(TEXT("success"), true);
+    ResultObj->SetStringField(TEXT("action"), TEXT("set_exponential_height_fog"));
     return ResultObj;
 }
 

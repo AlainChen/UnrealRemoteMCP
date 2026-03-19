@@ -179,6 +179,46 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
 	static FJsonObjectParameter HandleEnsureCaptureCamera(const FJsonObjectParameter& Params);
 
+	/**
+	 * 查找当前关卡中的基础 lighting rig
+	 * @param Params - 输入参数(当前不需要特定字段)
+	 * @return 包含 directional light / sky light / fog 信息的 JSON 对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleFindLightingRig(const FJsonObjectParameter& Params);
+
+	/**
+	 * 确保当前关卡中存在最小 lighting rig
+	 * @param Params - 可包含 "prefix"、"directional_light_name"、"sky_light_name"、"fog_name"
+	 * @return 包含 lighting rig 信息的 JSON 对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleEnsureBasicLightingRig(const FJsonObjectParameter& Params);
+
+	/**
+	 * 设置 DirectionalLight 的常用属性
+	 * @param Params - 必须包含 "name"，可选 intensity / light_color / temperature / indirect_intensity / source_angle / rotation
+	 * @return 包含更新结果的 JSON 对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleSetDirectionalLight(const FJsonObjectParameter& Params);
+
+	/**
+	 * 设置 SkyLight 的常用属性
+	 * @param Params - 必须包含 "name"，可选 intensity / light_color
+	 * @return 包含更新结果的 JSON 对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleSetSkyLight(const FJsonObjectParameter& Params);
+
+	/**
+	 * 设置 ExponentialHeightFog 的常用属性
+	 * @param Params - 必须包含 "name"，可选 fog_density / fog_height_falloff / start_distance / fog_inscattering_color
+	 * @return 包含更新结果的 JSON 对象
+	 */
+	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
+	static FJsonObjectParameter HandleSetExponentialHeightFog(const FJsonObjectParameter& Params);
+
 	
 	UFUNCTION(BlueprintCallable, Category = "MCP|Blueprint")
 	static FJsonObjectParameter ConvertObjectToJson(UObject* TargetObject);

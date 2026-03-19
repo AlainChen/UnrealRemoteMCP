@@ -61,6 +61,48 @@ The preferred evolution path is:
 4. reduce reliance on long editor Python scripts
 5. move heavier orchestration concerns out of the plugin later
 
+## Python Runtime Boundary
+
+This project currently touches more than one Python environment, and those layers
+should not be treated as interchangeable.
+
+There are three distinct runtime contexts:
+
+1. Unreal-internal Python
+   - provided by Unreal's `PythonScriptPlugin`
+   - executes `Content/Python/*` inside the editor
+   - is part of the plugin's editor-side runtime
+
+2. Plugin-bundled Python dependencies
+   - for example `Content/Python/Lib/site-packages`
+   - provide the packages required for the MCP service to boot inside Unreal
+   - should travel with the plugin rather than depend on machine-global setup
+
+3. External Python environments
+   - terminal Python
+   - UE-shipped `python.exe` used as a standalone interpreter
+   - ad hoc validation clients or local helper scripts
+
+The preferred deployment rule is:
+
+- plugin runtime dependencies should be self-contained at the plugin/editor side
+- external Python should be treated as a client or validation environment
+- external Python should not determine whether the in-editor MCP service can boot
+
+This matters for team-scale rollout:
+
+- coworkers should not need to reconstruct a fragile local Python environment just
+  to start the plugin
+- validation and orchestration can use separate runtimes if needed
+- outer control layers should talk to the plugin over MCP/HTTP contracts rather
+  than rely on sharing the same Python process model
+
+In practice:
+
+- keep Unreal-internal runtime stable first
+- keep plugin dependencies bundled and explicit
+- keep external validation/client tooling decoupled from plugin boot viability
+
 ## AI Usage Modes
 
 This fork should not be designed only for fully autonomous agents.
@@ -119,6 +161,38 @@ The current pain points are mostly about stability and structure:
 - tool result contracts are not yet consistent enough for robust automation
 
 One important current limitation is that map-changing operations are not yet seamless inside a single MCP session. Until the bridge lifecycle is redesigned, callers should treat those tools as session-disrupting and reconnect before issuing follow-up requests.
+
+## Tool Tiering Model
+
+The project already has domain grouping, but domain grouping alone is not enough for long-running automation.
+
+The fork now treats tool design as having at least four dimensions:
+
+- `domain`
+  - what functional area the tool belongs to
+- `risk_tier`
+  - `safe`
+  - `editor-stateful`
+  - `session-disrupting`
+- `capability_tier`
+  - `P0`
+  - `P0.5`
+  - `P1`
+  - `experimental`
+- `validation_status`
+  - `validated`
+  - `partial`
+  - `known-risk`
+
+For agent-facing structured tools, the minimum operational semantics should include:
+
+- `risk_tier`
+- `session_disrupted`
+- `reconnect_required`
+- `recommended_client_action`
+
+See:
+- `docs/tool_tiering_model.md`
 
 ## P0 Foundation Priorities
 

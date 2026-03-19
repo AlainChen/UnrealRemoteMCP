@@ -82,6 +82,45 @@ The following should keep working during the transition:
 
 The transition should be additive first, not destructive first.
 
+## Python Runtime Boundary
+
+Compatibility work should explicitly separate three Python/runtime concerns:
+
+- Unreal-internal Python runtime
+- plugin-bundled Python dependencies
+- external client/validation runtimes
+
+These layers serve different purposes.
+
+The Unreal-internal runtime is responsible for:
+
+- editor-side tool execution
+- bridge callbacks
+- plugin-local Python modules
+
+Plugin-bundled dependencies are responsible for:
+
+- making the in-editor MCP service boot reliably
+- reducing hidden dependence on workstation-global Python state
+
+External runtimes are responsible for:
+
+- validation clients
+- local orchestration experiments
+- helper scripts outside the editor
+
+Best-practice direction:
+
+- do not rely on machine PATH or an arbitrary workstation Python to make the
+  plugin boot
+- keep plugin runtime dependencies packaged with the plugin where practical
+- allow external clients to evolve independently, so long as they consume the
+  MCP/HTTP contract correctly
+
+This separation becomes more important as the project moves toward team-wide
+deployment, because "works on one machine's Python" is not a viable long-term
+deployment model.
+
 ## What Should Change First
 
 ### 1. Standardize tool contracts
@@ -99,6 +138,23 @@ New or upgraded tools should move toward a consistent result shape:
 ```
 
 This should happen before large orchestration changes.
+
+### 1.5. Standardize tool tiering semantics
+
+The plugin already has domain grouping, but long-running automation also needs:
+
+- `risk_tier`
+- `capability_tier`
+- `validation_status`
+- reconnect semantics
+
+This is how external agents distinguish:
+- a safe query
+- a normal editor mutation
+- a session-disrupting operation
+
+See:
+- `docs/tool_tiering_model.md`
 
 ### 2. Add structured P0 tools
 
@@ -373,6 +429,12 @@ The right refactor path for this fork is:
 - prepare for cleaner outer orchestration later
 
 This produces a more modern and scalable system without forcing a risky full rewrite.
+
+One practical rule should follow from that:
+
+new tools should not be considered complete until both are true:
+- the editor-side implementation exists
+- the tool has clear tiering semantics for agents
 
 ## Current Practical Backlog
 
