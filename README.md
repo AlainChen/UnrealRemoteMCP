@@ -177,6 +177,13 @@ P0 is not finished when tools merely exist. It is finished when the current stru
 - structured error taxonomy
 - task step logging and checkpoints
 
+P1 should start with `lighting rig / preset` rather than post process.
+
+Why:
+- it directly supports the current Gym baseline work in the related Hub fork
+- it can reuse the now-validated P0 map / scene / capture / health foundation
+- it is a better first editor-native abstraction layer than continuing to rely on long Python lighting scripts
+
 ## What Still Needs Work Right Now
 
 Even after the latest map-transition stabilization work, several important foundation items are still open:

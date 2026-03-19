@@ -292,6 +292,27 @@ Argument-validation note:
 - checkpoints or rollback-friendly save points
 - richer editor health and reconnect diagnostics
 
+### Current P1 Entry
+
+The first P1 slice should start with lighting foundation rather than post process.
+
+Reason:
+- it directly unlocks the current Hub-side Gym baseline
+- it builds on already validated P0 map / scene / capture tools
+- it is lower risk than jumping straight into full post-process wrappers
+
+Recommended first implementation order:
+1. `find_lighting_rig`
+2. `set_directional_light`
+3. `set_skylight`
+4. `set_exponential_height_fog`
+5. `ensure_basic_lighting_rig`
+6. `apply_time_of_day_preset`
+7. `apply_lighting_readability_pass`
+
+See:
+- `docs/p1_lighting_foundation_design.md`
+
 ## P2 Roadmap
 
 - mood and weather presets
