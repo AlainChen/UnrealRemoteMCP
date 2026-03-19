@@ -32,9 +32,11 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "EditorAssetLibrary.h"
 #include "EditorLevelLibrary.h"
-#include "LevelEditorSubsystem.h"
+#include "FileHelpers.h"
 #include "JsonObjectConverter.h"
 #include "Misc/PackageName.h"
+#include "Containers/Ticker.h"
+#include "MCPSubsystem.h"
 
 namespace
 {
@@ -86,9 +88,21 @@ namespace
         return GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
     }
 
-    ULevelEditorSubsystem* GetLevelEditorSubsystem()
+    void ScheduleSessionDisruptingMapAction(TFunction<void()> Action)
     {
-        return GEditor ? GEditor->GetEditorSubsystem<ULevelEditorSubsystem>() : nullptr;
+        FTSTicker::GetCoreTicker().AddTicker(
+            FTickerDelegate::CreateLambda([Action = MoveTemp(Action)](float)
+            {
+                if (UMCPSubsystem* Subsystem = UMCPSubsystem::Get())
+                {
+                    Subsystem->ClearContextForSessionTransition();
+                    Subsystem->ScheduleRestartAfterTransition();
+                }
+
+                Action();
+                return false;
+            }),
+            0.0f);
     }
 
     void GetAllEditorActors(TArray<AActor*>& OutActors)
@@ -724,17 +738,19 @@ FJsonObjectParameter UMCPEditorTools::HandleLoadMap(const FJsonObjectParameter& 
             FString::Printf(TEXT("Map asset not found: %s"), *NormalizedMapPath));
     }
 
-    ULevelEditorSubsystem* LevelEditorSubsystem = GetLevelEditorSubsystem();
-    if (!LevelEditorSubsystem)
+    if (UWorld* World = GetEditorWorldChecked())
     {
-        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get LevelEditorSubsystem"));
+        const FString CurrentMapPath = World->GetPackage() ? World->GetPackage()->GetName() : TEXT("");
+        if (CurrentMapPath == NormalizedMapPath)
+        {
+            return CreateMapLifecycleSuccess(TEXT("load_map"), NormalizedMapPath, true, false);
+        }
     }
 
-    if (!LevelEditorSubsystem->LoadLevel(NormalizedMapPath))
+    ScheduleSessionDisruptingMapAction([NormalizedMapPath]()
     {
-        return FUnrealMCPCommonUtils::CreateErrorResponse(
-            FString::Printf(TEXT("Failed to load map: %s"), *NormalizedMapPath));
-    }
+        UEditorLevelLibrary::LoadLevel(NormalizedMapPath);
+    });
 
     return CreateMapLifecycleSuccess(TEXT("load_map"), NormalizedMapPath, true, true);
 }
@@ -753,13 +769,7 @@ FJsonObjectParameter UMCPEditorTools::HandleSaveCurrentMap(const FJsonObjectPara
         return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Current map path is empty"));
     }
 
-    ULevelEditorSubsystem* LevelEditorSubsystem = GetLevelEditorSubsystem();
-    if (!LevelEditorSubsystem)
-    {
-        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get LevelEditorSubsystem"));
-    }
-
-    if (!LevelEditorSubsystem->SaveCurrentLevel())
+    if (!UEditorLevelLibrary::SaveCurrentLevel())
     {
         return FUnrealMCPCommonUtils::CreateErrorResponse(
             FString::Printf(TEXT("Failed to save current map: %s"), *CurrentMapPath));
@@ -794,13 +804,7 @@ FJsonObjectParameter UMCPEditorTools::HandleSaveMapAs(const FJsonObjectParameter
         return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Target map path must differ from current map"));
     }
 
-    ULevelEditorSubsystem* LevelEditorSubsystem = GetLevelEditorSubsystem();
-    if (!LevelEditorSubsystem)
-    {
-        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get LevelEditorSubsystem"));
-    }
-
-    if (!LevelEditorSubsystem->SaveCurrentLevel())
+    if (!UEditorLevelLibrary::SaveCurrentLevel())
     {
         return FUnrealMCPCommonUtils::CreateErrorResponse(
             FString::Printf(TEXT("Failed to save current map before save-as: %s"), *CurrentMapPath));
@@ -812,13 +816,18 @@ FJsonObjectParameter UMCPEditorTools::HandleSaveMapAs(const FJsonObjectParameter
             FString::Printf(TEXT("Target map already exists: %s"), *NormalizedTargetMapPath));
     }
 
-    if (!UEditorAssetLibrary::DuplicateAsset(CurrentMapPath, NormalizedTargetMapPath))
+    const FString TargetFilename = FPackageName::LongPackageNameToFilename(
+        NormalizedTargetMapPath,
+        FPackageName::GetMapPackageExtension());
+
+    if (!FEditorFileUtils::SaveMap(World, TargetFilename))
     {
         return FUnrealMCPCommonUtils::CreateErrorResponse(
-            FString::Printf(TEXT("Failed to duplicate map from %s to %s"), *CurrentMapPath, *NormalizedTargetMapPath));
+            FString::Printf(TEXT("Failed to save map as: %s"), *NormalizedTargetMapPath));
     }
 
-    return CreateMapLifecycleSuccess(TEXT("save_map_as"), NormalizedTargetMapPath, false, true);
+    const FString CurrentMapAfterSave = World->GetPackage() ? World->GetPackage()->GetName() : NormalizedTargetMapPath;
+    return CreateMapLifecycleSuccess(TEXT("save_map_as"), CurrentMapAfterSave, CurrentMapAfterSave == NormalizedTargetMapPath, false);
 }
 
 FJsonObjectParameter UMCPEditorTools::HandleCreateBlankMap(const FJsonObjectParameter& Params)
@@ -836,17 +845,10 @@ FJsonObjectParameter UMCPEditorTools::HandleCreateBlankMap(const FJsonObjectPara
             FString::Printf(TEXT("Map already exists: %s"), *NormalizedMapPath));
     }
 
-    ULevelEditorSubsystem* LevelEditorSubsystem = GetLevelEditorSubsystem();
-    if (!LevelEditorSubsystem)
+    ScheduleSessionDisruptingMapAction([NormalizedMapPath]()
     {
-        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get LevelEditorSubsystem"));
-    }
-
-    if (!LevelEditorSubsystem->NewLevel(NormalizedMapPath))
-    {
-        return FUnrealMCPCommonUtils::CreateErrorResponse(
-            FString::Printf(TEXT("Failed to create blank map: %s"), *NormalizedMapPath));
-    }
+        UEditorLevelLibrary::NewLevel(NormalizedMapPath);
+    });
 
     return CreateMapLifecycleSuccess(TEXT("create_blank_map"), NormalizedMapPath, true, true);
 }
@@ -879,17 +881,10 @@ FJsonObjectParameter UMCPEditorTools::HandleCreateMapFromTemplate(const FJsonObj
             FString::Printf(TEXT("Template map not found: %s"), *NormalizedTemplateMapPath));
     }
 
-    ULevelEditorSubsystem* LevelEditorSubsystem = GetLevelEditorSubsystem();
-    if (!LevelEditorSubsystem)
+    ScheduleSessionDisruptingMapAction([NormalizedMapPath, NormalizedTemplateMapPath]()
     {
-        return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Failed to get LevelEditorSubsystem"));
-    }
-
-    if (!LevelEditorSubsystem->NewLevelFromTemplate(NormalizedMapPath, NormalizedTemplateMapPath))
-    {
-        return FUnrealMCPCommonUtils::CreateErrorResponse(
-            FString::Printf(TEXT("Failed to create map from template %s"), *NormalizedTemplateMapPath));
-    }
+        UEditorLevelLibrary::NewLevelFromTemplate(NormalizedMapPath, NormalizedTemplateMapPath);
+    });
 
     return CreateMapLifecycleSuccess(TEXT("create_map_from_template"), NormalizedMapPath, true, true);
 }

@@ -132,10 +132,12 @@ Confirmed working:
 
 Observed failure boundary:
 
-- after `save_map_as`, calling `load_map` on the duplicated map crashed the editor when the implementation still used deprecated `UEditorLevelLibrary` map lifecycle APIs
-- migrating to `ULevelEditorSubsystem` did not eliminate the crash
-- the practical boundary is now treated as a session-lifecycle problem rather than a single bad API call
-- map-changing operations should be treated as `session-disrupting` until the bridge lifecycle is redesigned
+- the original implementation could crash the editor after `save_map_as -> load_map(copy)`
+- the current fork no longer treats seamless map transition as safe inside a live MCP session
+- `create_blank_map` now completes without crashing the editor, but terminates the MCP session and requires reconnect
+- `load_map` now completes without crashing the editor, but terminates the MCP session and requires reconnect
+- `save_map_as` now fails cleanly on unnamed temporary maps such as `/Temp/Untitled_1` instead of crashing the editor
+- seamless map-transition support is still blocked on a broader bridge-lifecycle redesign
 
 Observed environment notes:
 
@@ -152,5 +154,7 @@ Current status should be treated as:
 - runtime-validated for the first practical chain
 - runtime-validated for most of the second chain
 - runtime-validated for the P0 evidence-capture batch
-- blocked on seamless map-transition support
+- runtime-validated for session-disrupting `create_blank_map`
+- runtime-validated for session-disrupting `load_map`
+- still blocked on seamless map-transition support
 - ready to use evidence capture as the preferred low-risk baseline path

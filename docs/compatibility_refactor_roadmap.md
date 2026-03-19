@@ -122,7 +122,10 @@ These tools should be treated as two separate compatibility tiers:
 
 - `save_current_map`
   - safe to call inside an existing MCP session
-- `load_map`, `create_blank_map`, `create_map_from_template`, `save_map_as`
+- `save_map_as`
+  - should fail cleanly when the current map has no persistent filename
+  - should avoid forcing an immediate reload of the saved copy inside the same live session
+- `load_map`, `create_blank_map`, `create_map_from_template`
   - session-disrupting
   - callers should expect the current MCP session to terminate and reconnect before continuing
 
