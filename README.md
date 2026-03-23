@@ -250,6 +250,7 @@ For this fork's first concrete implementation target, see:
 
 - `docs/compatibility_refactor_roadmap.md`
 - `docs/p0_map_lifecycle_design.md`
+- `docs/runtime_dependency_and_agent_integration.md`
 
 ## Upstream
 

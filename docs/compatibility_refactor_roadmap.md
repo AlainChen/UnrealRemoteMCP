@@ -39,6 +39,23 @@ to:
 
 while preserving enough compatibility that current workflows can keep operating.
 
+## Runtime Dependency Boundary
+
+One practical constraint must be treated as a first-class engineering issue:
+
+- the plugin's Unreal runtime Python environment is not the same thing as local development Python
+
+That means:
+
+- `uv` can help local development, tests, and future outer runners
+- but it does not automatically make Unreal-side plugin runtime imports work
+
+The fork should therefore treat runtime dependency packaging as part of project deployment, not as an incidental machine setup detail.
+
+See:
+
+- `docs/runtime_dependency_and_agent_integration.md`
+
 ## AI Interaction Modes
 
 The plugin should support more than one style of AI usage.
