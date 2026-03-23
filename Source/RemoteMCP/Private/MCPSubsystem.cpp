@@ -1,9 +1,22 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "MCPSubsystem.h"
 #include "Async/Future.h"
 #include "IPythonScriptPlugin.h"
 #include "MCPSetting.h"
+
+UMCPSubsystem* UMCPSubsystem::Instance = nullptr;
+
+namespace
+{
+	void ResetMCPObject(FMCPObject& Context)
+	{
+		Context.Bridge.Unbind();
+		Context.Tick.Unbind();
+		Context.GUID.Reset();
+		Context.PythonObjectHandle = nullptr;
+	}
+}
 
 void UMCPSubsystem::Tick(float DeltaTime)
 {
@@ -35,6 +48,12 @@ void UMCPSubsystem::Tick(float DeltaTime)
 			StopMCP();
 		}
 	}
+}
+
+void UMCPSubsystem::Deinitialize()
+{
+	StopMCP();
+	ClearObject();
 }
 
 void UMCPSubsystem::PostEngineInit()
@@ -75,50 +94,27 @@ void UMCPSubsystem::SetupBridge()
 	IPythonScriptPlugin::Get()->ExecPythonCommandEx(CommandEx);
 }
 
-bool UMCPSubsystem::ShouldCreateSubsystem(UObject* Outer) const
+void UMCPSubsystem::Initialize()
 {
-	return Super::ShouldCreateSubsystem(Outer) && GetDefault<UMCPSetting>()->bEnable;
-}
-
-void UMCPSubsystem::Initialize(FSubsystemCollectionBase& Collection)
-{
-	Super::Initialize(Collection);
-	// AI(GPT-5.2): 修复编译错误：移除误入的调试字符串 "aaa"
 	UMCPSubsystem::PostEngineInit();
-	// FCoreUObjectDelegates::ReloadCompleteDelegate.AddLambda([this](EReloadCompleteReason Reason)
-	// {
-	// 	if (auto* SubSystem = UMCPSubsystem::Get())
-	// 	{
-	// 		SubSystem->StopMCP();
-	// 		ClearObject();
-	// 	}
-	// });
-}
-
-void UMCPSubsystem::Deinitialize()
-{
-	Super::Deinitialize();
-}
-
-void UMCPSubsystem::PostCDOCompiled(const FPostCDOCompiledContext& Context)
-{
-	Super::PostCDOCompiled(Context);
 }
 
 UMCPSubsystem* UMCPSubsystem::Get()
 {
-	return GEditor->GetEditorSubsystem<UMCPSubsystem>();
+	return Instance;
 }
 
 void UMCPSubsystem::SetupObject(FMCPObject Context)
 {
+	ResetMCPObject(MCPContext);
 	this->MCPContext = Context;
 	WaitStart = true;
 }
 
 void UMCPSubsystem::ClearObject()
 {
-	this->MCPContext = FMCPObject();
+	ResetMCPObject(MCPContext);
+	WaitStart = false;
 }
 
 void UMCPSubsystem::StartMCP()
@@ -160,15 +156,24 @@ void UMCPSubsystem::Reload()
 
 void UMCPSubsystem::StopMCP()
 {
-	if (!MCPContext.IsRunning())
+	if (!MCPContext.Bridge.IsBound())
+	{
+		ClearObject();
 		return;
+	}
+
+	if (!MCPContext.IsRunning())
+	{
+		ClearObject();
+		return;
+	}
 	if (MCPContext.Bridge.IsBound())
 	{
 		auto _ = MCPContext.Bridge.Execute(EMCPBridgeFuncType::Exit, TEXT("MCP Stopped"));
 		RunTread.WaitFor(FTimespan::FromSeconds(100));
 	}
 
-	//ClearObject();
+	ClearObject();
 }
 
 void UMCPSubsystem::ClearContextForSessionTransition()
@@ -185,10 +190,6 @@ void UMCPSubsystem::ScheduleRestartAfterTransition(int32 DelayFrames)
 {
 	// Intentionally no-op for now. Map-changing tools should be treated as
 	// session-disrupting, and the external client is responsible for reconnecting.
-}
-
-void UMCPSubsystem::HandleMapOpened(const FString& Filename, bool bAsTemplate)
-{
 }
 
 EMCPServerState UMCPSubsystem::GetMCPServeState() const
