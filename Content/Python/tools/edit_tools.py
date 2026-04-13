@@ -68,28 +68,42 @@ def register_edit_tool( mcp:UnrealMCP):
                 else:
                     effective_level = "overview"
             
-            # OVERVIEW: only class counts + gameplay highlights
+            # OVERVIEW: class counts + gameplay actors WITH spatial context
             if effective_level == "overview":
-                # Identify gameplay-relevant classes (not StaticMesh/Landscape/Light/Nav)
+                # Noise: environment/infrastructure actors that rarely matter for gameplay tasks
                 noise_prefixes = ("StaticMesh", "Landscape", "NavigationData", "AbstractNavData",
                                   "WorldSettings", "GameMode", "GameState", "HUD", "GameSession",
                                   "AtmosphericFog", "SkyAtmosphere", "SkyLight", "VolumetricCloud",
-                                  "ExponentialHeightFog", "PostProcess", "LevelSequence")
+                                  "ExponentialHeightFog", "PostProcess", "LevelSequence",
+                                  "Note", "TextRender", "CameraActor")
+                # Light actors: count but don't list individually
+                light_prefixes = ("PointLight", "SpotLight", "DirectionalLight", "RectLight")
+                
                 gameplay_actors = []
                 for actor in matched_actors:
                     cls = actor.get_class().get_name()
-                    if not cls.startswith(noise_prefixes):
-                        gameplay_actors.append({"name": actor.get_name(), "class": cls})
+                    if cls.startswith(noise_prefixes) or cls.startswith(light_prefixes):
+                        continue
+                    loc = actor.get_actor_location()
+                    gameplay_actors.append({
+                        "name": actor.get_name(),
+                        "class": cls,
+                        "location": [round(loc.x, 0), round(loc.y, 0), round(loc.z, 0)],
+                    })
+                
+                # Sort by X position (rough left-to-right / progression order)
+                gameplay_actors.sort(key=lambda a: a["location"][0])
                 
                 return {
                     "total_actors": len(all_actors),
                     "matched_actors": len(matched_actors),
                     "by_class": dict(sorted(class_counts.items(), key=lambda x: -x[1])),
-                    "gameplay_highlights": gameplay_actors[:30],
+                    "gameplay_actors": gameplay_actors[:50],
                     "_meta": {
                         "detail_level": "overview",
                         "filter": class_filter or "(none)",
-                        "hint": "Use class_filter to drill into a specific class, or detail_level='standard' for transforms",
+                        "note": "gameplay_actors sorted by X (progression order), includes location for spatial awareness",
+                        "hint": "Use class_filter='ClassName' to get details on specific actors",
                     }
                 }
             
