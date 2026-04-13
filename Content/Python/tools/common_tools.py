@@ -207,17 +207,30 @@ def register_common_tools(mcp : UnrealMCP):
                 exec(script,namespace)
                 namespace.pop('__builtins__')
                 ret = f"{namespace.get('result',namespace)}"
-                logs = f"{log_capture.get_logs()}"
+                raw_logs = log_capture.get_logs()
+                
+                # Compress logs: filter noise, extract key info, generate summary
+                try:
+                    from foundation.log_compressor import compress_logs, format_compressed_logs
+                    compressed = compress_logs(list(raw_logs) if raw_logs else [])
+                    logs_display = format_compressed_logs(compressed)
+                except Exception:
+                    # Fallback: if compressor fails, use raw logs
+                    compressed = None
+                    logs_display = f"{raw_logs}"
+                
                 return CallToolResult(
                     content=[
                         TextContent(
                             type="text",
-                            text=f"result: {ret}\nlogs:\n{logs}",
+                            text=f"result: {ret}\nlogs:\n{logs_display}",
                         )
                     ],
                     structuredContent={
                         "result": ret,
-                        "logs": logs,
+                        "logs": logs_display,
+                        "raw_logs": f"{raw_logs}" if compressed else None,
+                        "log_stats": f"{compressed['raw_line_count']} raw → {compressed['compressed_line_count']} compressed ({compressed['compression_ratio']:.0%} reduction)" if compressed else None,
                     },
                 )
         except Exception as e:
@@ -272,10 +285,22 @@ def register_common_tools(mcp : UnrealMCP):
                     )
 
             ret_str = f"{result}"
-            logs = logs_pre + logs_post
+            raw_logs_combined = logs_pre + logs_post
+            
+            # Compress logs
+            try:
+                from foundation.log_compressor import compress_logs, format_compressed_logs
+                # Split combined string back into lines for compression
+                log_lines = [l for l in raw_logs_combined.replace("['", "").replace("']", "").split("', '") if l.strip()] if raw_logs_combined else []
+                compressed = compress_logs(log_lines)
+                logs_display = format_compressed_logs(compressed)
+            except Exception:
+                compressed = None
+                logs_display = raw_logs_combined
+            
             return CallToolResult(
-                content=[TextContent(type="text", text=f"result: {ret_str}\nlogs:\n{logs}")],
-                structuredContent={"result": ret_str, "logs": logs},
+                content=[TextContent(type="text", text=f"result: {ret_str}\nlogs:\n{logs_display}")],
+                structuredContent={"result": ret_str, "logs": logs_display},
             )
         except Exception as e:
             return CallToolResult(
