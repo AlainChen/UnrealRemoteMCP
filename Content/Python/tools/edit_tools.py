@@ -25,64 +25,109 @@ def register_edit_tool( mcp:UnrealMCP):
     )
 
     @mcp.domain_tool("level")
-    def get_actors_in_level(ctx: Context, detail_level: str = "summary") -> List[Dict[str, Any]]:
-        """Get a list of all actors in the current level.
+    def get_actors_in_level(ctx: Context, class_filter: str = "", detail_level: str = "auto") -> Dict[str, Any]:
+        """Get actors in the current level with adaptive detail.
         
         Args:
-            detail_level: Information detail level
-                - "summary": name + class only (most token-efficient, default)
+            class_filter: Filter by class name substring (e.g. "Spawner", "Trigger"). Empty = all.
+            detail_level: Information precision. Default "auto" adapts based on result count:
+                - "auto": ≤20 results → standard, 21-100 → summary, >100 → overview
+                - "overview": class counts + gameplay highlights (best for large maps)
+                - "summary": name + class per actor
                 - "standard": + location/rotation/scale
-                - "full": + path and all available info
+                - "full": + path
+        
+        Returns:
+            Dict with "actors" list and "_meta" info. In overview mode, returns "by_class" counts instead.
         """
         try:
             all_actors = unreal.EditorLevelLibrary.get_all_level_actors()
             
-            actors_info = []
+            # Apply class filter at iteration level (no wasted work)
+            filter_lower = class_filter.lower() if class_filter else ""
+            matched_actors = []
+            class_counts = {}
+            
             for actor in all_actors:
-                if actor:
-                    # SUMMARY: 身份信息（始终包含）
-                    actor_info = {
-                        "name": actor.get_name(),
-                        "class": actor.get_class().get_name(),
+                if not actor:
+                    continue
+                cls_name = actor.get_class().get_name()
+                class_counts[cls_name] = class_counts.get(cls_name, 0) + 1
+                
+                if filter_lower and filter_lower not in cls_name.lower() and filter_lower not in actor.get_name().lower():
+                    continue
+                matched_actors.append(actor)
+            
+            # Adaptive: decide detail level based on result count
+            effective_level = detail_level
+            if detail_level == "auto":
+                if len(matched_actors) <= 20:
+                    effective_level = "standard"
+                elif len(matched_actors) <= 100:
+                    effective_level = "summary"
+                else:
+                    effective_level = "overview"
+            
+            # OVERVIEW: only class counts + gameplay highlights
+            if effective_level == "overview":
+                # Identify gameplay-relevant classes (not StaticMesh/Landscape/Light/Nav)
+                noise_prefixes = ("StaticMesh", "Landscape", "NavigationData", "AbstractNavData",
+                                  "WorldSettings", "GameMode", "GameState", "HUD", "GameSession",
+                                  "AtmosphericFog", "SkyAtmosphere", "SkyLight", "VolumetricCloud",
+                                  "ExponentialHeightFog", "PostProcess", "LevelSequence")
+                gameplay_actors = []
+                for actor in matched_actors:
+                    cls = actor.get_class().get_name()
+                    if not cls.startswith(noise_prefixes):
+                        gameplay_actors.append({"name": actor.get_name(), "class": cls})
+                
+                return {
+                    "total_actors": len(all_actors),
+                    "matched_actors": len(matched_actors),
+                    "by_class": dict(sorted(class_counts.items(), key=lambda x: -x[1])),
+                    "gameplay_highlights": gameplay_actors[:30],
+                    "_meta": {
+                        "detail_level": "overview",
+                        "filter": class_filter or "(none)",
+                        "hint": "Use class_filter to drill into a specific class, or detail_level='standard' for transforms",
                     }
-                    
-                    # STANDARD: 加位置/旋转/缩放
-                    if detail_level in ("standard", "full"):
-                        actor_info["location"] = [
-                            actor.get_actor_location().x, 
-                            actor.get_actor_location().y, 
-                            actor.get_actor_location().z
-                        ]
-                        actor_info["rotation"] = [
-                            actor.get_actor_rotation().pitch, 
-                            actor.get_actor_rotation().yaw, 
-                            actor.get_actor_rotation().roll
-                        ]
-                        actor_info["scale"] = [
-                            actor.get_actor_scale3d().x, 
-                            actor.get_actor_scale3d().y, 
-                            actor.get_actor_scale3d().z
-                        ]
-                    
-                    # FULL: 加路径
-                    if detail_level == "full":
-                        actor_info["path"] = actor.get_path_name()
-                    
-                    actors_info.append(actor_info)
+                }
             
-            result = actors_info
+            # Build actor list at requested detail level
+            actors_info = []
+            for actor in matched_actors:
+                actor_info = {
+                    "name": actor.get_name(),
+                    "class": actor.get_class().get_name(),
+                }
+                
+                if effective_level in ("standard", "full"):
+                    loc = actor.get_actor_location()
+                    rot = actor.get_actor_rotation()
+                    actor_info["location"] = [round(loc.x, 1), round(loc.y, 1), round(loc.z, 1)]
+                    actor_info["rotation"] = [round(rot.pitch, 1), round(rot.yaw, 1), round(rot.roll, 1)]
+                
+                if effective_level == "full":
+                    actor_info["path"] = actor.get_path_name()
+                    sc = actor.get_actor_scale3d()
+                    actor_info["scale"] = [round(sc.x, 2), round(sc.y, 2), round(sc.z, 2)]
+                
+                actors_info.append(actor_info)
             
-            # 添加 LOD 提示
-            if detail_level != "full":
-                unreal.log(f"Found {len(actors_info)} actors (detail_level={detail_level}). Use 'standard' for transforms, 'full' for paths.")
-            else:
-                unreal.log(f"Found {len(actors_info)} actors in level")
-            
-            return result
+            return {
+                "actors": actors_info,
+                "count": len(actors_info),
+                "_meta": {
+                    "detail_level": effective_level,
+                    "auto_resolved": detail_level == "auto",
+                    "filter": class_filter or "(none)",
+                    "total_in_level": len(all_actors),
+                }
+            }
             
         except Exception as e:
             unreal.log_error(f"Error getting actors in level: {e}")
-            return []
+            return {"actors": [], "count": 0, "error": str(e)}
     
     @mcp.domain_tool("level")
     def get_actors_detail_info(ctx: Context, actor_name : str) -> Dict:
