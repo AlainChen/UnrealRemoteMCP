@@ -52,12 +52,44 @@ def register_edgraph_tools(mcp: UnrealMCP):
         })
 
     @mcp.domain_tool("edgraph")
-    def edgraph_list_nodes(graph_path: str, include_properties: bool = False) -> Dict[str, Any]:
-        """列出图内所有节点及其 pin 信息。"""
-        return call_cpp_tools(unreal.MCPEdGraphTools.handle_list_graph_nodes, {
+    def edgraph_list_nodes(graph_path: str, include_properties: bool = False, detail_level: str = "summary") -> Dict[str, Any]:
+        """列出图内所有节点。
+        
+        Args:
+            graph_path: 图路径
+            include_properties: 是否包含属性（兼容旧参数）
+            detail_level: 信息精度级别
+                - "summary": 节点名+类型（最省 token，默认）
+                - "standard": +位置+pin 概况
+                - "full": 完整 pin 和属性信息
+        """
+        # full 模式或 include_properties=True 时，请求完整数据
+        effective_level = "full" if include_properties else detail_level
+        
+        result = call_cpp_tools(unreal.MCPEdGraphTools.handle_list_graph_nodes, {
             "graph_path": graph_path,
-            "include_properties": include_properties,
+            "include_properties": effective_level == "full",
         })
+        
+        # 对返回的 nodes 应用 LOD 裁剪
+        if result.get("success") and effective_level != "full":
+            try:
+                from foundation.lod import lod_filter_list, lod_stats, NODE_SCHEMA
+                data = result.get("data", {})
+                nodes = data.get("nodes", [])
+                if nodes:
+                    filtered = lod_filter_list(nodes, NODE_SCHEMA, effective_level)
+                    stats = lod_stats(nodes, filtered)
+                    data["nodes"] = filtered
+                    data["_lod"] = {
+                        "level": effective_level,
+                        "hint": "Use detail_level='standard' for positions, 'full' for complete pin info",
+                        **stats,
+                    }
+            except Exception:
+                pass  # LOD 失败时返回原始数据
+        
+        return result
 
     @mcp.domain_tool("edgraph")
     def edgraph_get_node(
