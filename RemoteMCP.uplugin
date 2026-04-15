@@ -29,6 +29,11 @@
 		{
 			"Name": "EditorScriptingUtilities",
 			"Enabled": true
+		},
+		{
+			"Name": "ECABridge",
+			"Enabled": true,
+			"Optional": true
 		}
 	]
 }

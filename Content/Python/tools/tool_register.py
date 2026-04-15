@@ -10,6 +10,7 @@ import tools.livecoding_tools as livecoding_register
 import tools.edgraph_tools as edgraph_register
 import tools.behaviortree_tools as bt_register
 import tools.slate_tools as slate_register
+import tools.eca_tools as eca_register
 import unreal
 import types
 from typing import Any
@@ -78,6 +79,7 @@ def register_all_tools(mcp:UnrealMCP):
     edgraph_register.register_edgraph_tools(mcp)
     bt_register.register_behaviortree_tools(mcp)
     slate_register.register_slate_tools(mcp)
+    eca_register.register_eca_tools(mcp)
     
 def reload_all_tools(mcp:UnrealMCP):
     global_context.reload_all_tool_modules()

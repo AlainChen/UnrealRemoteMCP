@@ -1,5 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
+using System.IO;
 using UnrealBuildTool;
 
 public class RemoteMCP : ModuleRules
@@ -7,70 +8,79 @@ public class RemoteMCP : ModuleRules
 	public RemoteMCP(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
-		
-		PublicIncludePaths.AddRange(
-			new string[] {
-				// ... add public include paths required here ...
-			}
-			);
-				
-		
-		PrivateIncludePaths.AddRange(
-			new string[] {
-				// ... add other private include paths required here ...
-			}
-			);
-			
-		
+
 		PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"Core", "JsonUtilities",
-				// ... add other public dependencies that you statically link with here ...
+				"Core",
+				"JsonUtilities"
 			}
-			);
-			
-		
+		);
+
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"Projects",
-				"InputCore",
-				"EditorFramework",
-				"UnrealEd",
-				"ToolMenus",
+				// Engine core
 				"CoreUObject",
 				"Engine",
-				"Slate",
-				"SlateCore", "Blutility","UMG","UMGEditor", "PythonScriptPlugin","Json","JsonUtilities"
-				// ... add private dependencies that you statically link with here ...	
-				,"DeveloperSettings", "EditorScriptingUtilities",
-				"AIModule", "BehaviorTreeEditor", "AIGraph"
-			}
-			);
-		PrivateDependencyModuleNames.AddRange(
-			new string[]
-			{
+				"Projects",
+				"InputCore",
+				"Json",
+				"JsonUtilities",
+				"DeveloperSettings",
+
+				// Editor
 				"UnrealEd",
-				"EditorScriptingUtilities",
+				"EditorFramework",
 				"EditorSubsystem",
+				"EditorScriptingUtilities",
 				"LevelEditor",
+				"ToolMenus",
+
+				// UI
 				"Slate",
 				"SlateCore",
 				"UMG",
+				"UMGEditor",
+				"Blutility",
+
+				// Blueprint graph editing
 				"Kismet",
 				"KismetCompiler",
 				"BlueprintGraph",
-				"Projects",
-				"AssetRegistry"
+				"AssetRegistry",
+
+				// Python
+				"PythonScriptPlugin",
+
+				// AI / Behavior Tree
+				"AIModule",
+				"BehaviorTreeEditor",
+				"AIGraph"
 			}
 		);
-		
-		DynamicallyLoadedModuleNames.AddRange(
-			new string[]
-			{
-				// ... add any modules that your module loads dynamically here ...
-			}
-			);
+
+		// ----------------------------------------------------------------
+		// ECABridge integration (Optional)
+		//
+		// When the engine contains the ECABridge plugin (Experimental),
+		// we link against it and define WITH_ECA_BRIDGE=1 so that
+		// MCPECAProxy can call FECACommandRegistry at compile time.
+		// When absent (e.g. TestMCP project), WITH_ECA_BRIDGE=0 and
+		// all ECA code paths compile to safe stubs.
+		//
+		// Pattern reference: ECABridge.Build.cs L91-101 (ToolsetRegistry)
+		// ----------------------------------------------------------------
+		bool bHasECABridge = Directory.Exists(
+			Path.Combine(EngineDirectory, "Plugins", "Experimental", "ECABridge", "Source"));
+		if (bHasECABridge)
+		{
+			PrivateDependencyModuleNames.Add("ECABridge");
+			PublicDefinitions.Add("WITH_ECA_BRIDGE=1");
+		}
+		else
+		{
+			PublicDefinitions.Add("WITH_ECA_BRIDGE=0");
+		}
 	}
 }
