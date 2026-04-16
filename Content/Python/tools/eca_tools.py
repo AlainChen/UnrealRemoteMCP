@@ -51,6 +51,82 @@ def _call_eca_proxy_string(method_name: str, *args: Any) -> dict:
         return {"success": False, "error": f"MCPECAProxy.{method_name} failed: {e}"}
 
 
+def _guard_lisp_duplicate_events(args: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Pre-flight check for lisp_to_blueprint: detect duplicate event names.
+
+    ECABridge's lisp_to_blueprint creates CustomEvent nodes without checking
+    if one with the same name already exists in the EventGraph. Duplicates
+    cause "Found more than one function with the same name" → crash.
+
+    We parse the Lisp code for (event <name> ...) forms, then read the
+    existing blueprint via blueprint_to_lisp to check for conflicts.
+
+    Returns None if safe to proceed, or an error dict if duplicates found.
+    """
+    import re
+
+    code = args.get("code", "")
+    bp_path = args.get("blueprint_path", "")
+    if not code or not bp_path:
+        return None  # let ECA handle missing-arg errors
+
+    # Extract event names from the Lisp code being submitted
+    # Matches: (event EventName ...) and (event EventName :params ...)
+    new_events = set()
+    for m in re.finditer(r'\(\s*event\s+(\w+)', code, re.IGNORECASE):
+        name = m.group(1)
+        # Skip standard override events (BeginPlay, Tick, etc.) — those are
+        # UK2Node_Event, not CustomEvent, so duplicates are handled by UE.
+        if name.startswith("Receive") or name in ("BeginPlay", "Tick", "EndPlay"):
+            continue
+        new_events.add(name)
+
+    if not new_events:
+        return None  # no custom events to check
+
+    # Read existing blueprint to find current events
+    try:
+        existing = call_cpp_tools(
+            __import__("unreal").MCPECAProxy.call_eca_command,
+            {"command": "blueprint_to_lisp", "arguments": {"blueprint_path": bp_path}},
+        )
+        existing_code = ""
+        if existing.get("success"):
+            result = existing.get("result", existing)
+            existing_code = result.get("lisp_code", "")
+    except Exception:
+        return None  # can't check, let it through
+
+    if not existing_code:
+        return None
+
+    # Find existing custom event names
+    existing_events = set()
+    for m in re.finditer(r'\(\s*event\s+(\w+)', existing_code, re.IGNORECASE):
+        name = m.group(1)
+        if not name.startswith("Receive") and name not in ("BeginPlay", "Tick", "EndPlay"):
+            existing_events.add(name)
+
+    # Check for conflicts
+    conflicts = new_events & existing_events
+    if conflicts:
+        return {
+            "success": False,
+            "command": "lisp_to_blueprint",
+            "error": (
+                f"BLOCKED: Custom event(s) {sorted(conflicts)} already exist in "
+                f"{bp_path}. Creating duplicates would corrupt the blueprint and crash "
+                f"the editor. Either: (1) use a different event name, (2) remove the "
+                f"existing event first via blueprint node deletion, or (3) pass only "
+                f"the new logic without re-declaring the event."
+            ),
+            "existing_events": sorted(existing_events),
+            "conflicting_events": sorted(conflicts),
+        }
+
+    return None
+
+
 def register_eca_tools(mcp: UnrealMCP) -> None:
     """Register the 'eca' domain — proxy to ECABridge 238+ commands."""
 
@@ -173,12 +249,32 @@ def register_eca_tools(mcp: UnrealMCP) -> None:
         if not _has_eca_proxy():
             return {"success": False, "error": "MCPECAProxy not available."}
 
+        args = arguments or {}
+
+        # ── Guard: lisp_to_blueprint duplicate event check ──
+        # ECABridge creates CustomEvent nodes without checking if one with the
+        # same name already exists, causing "Found more than one function with
+        # the same name" → ACCESS_VIOLATION.  We pre-check here.
+        if command == "lisp_to_blueprint":
+            guard_result = _guard_lisp_duplicate_events(args)
+            if guard_result is not None:
+                return guard_result
+
         try:
             import unreal
-            return call_cpp_tools(
+            result = call_cpp_tools(
                 unreal.MCPECAProxy.call_eca_command,
-                {"command": command, "arguments": arguments or {}},
+                {"command": command, "arguments": args},
             )
+
+            # ── PostCompletionChecklist hints ──
+            if command == "lisp_to_blueprint" and result.get("success"):
+                result["_hint"] = (
+                    "Run compile_blueprint to verify compilation. "
+                    "Use blueprint_to_lisp to read back and verify the result."
+                )
+
+            return result
         except Exception as e:
             return {"success": False, "command": command, "error": str(e)}
 
