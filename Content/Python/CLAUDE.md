@@ -46,3 +46,20 @@
 }
 ```
 并在``` cursor setting -> Tools & MCP -> Rule and Commands  ```中勾选 ```include CLAUDE.md in Context```
+
+### ECA 集成（2026-04 新增）
+
+RemoteMCP 现在通过 `eca` domain 代理 ECABridge 的 238+ C++ 原子命令（19 个分类）。
+
+**关键用法**:
+- `get_dispatch(domain="eca")` — 查看 eca domain 的 4 个工具
+- `dispatch_tool("eca", "eca_search", '{"keyword": "mesh"}')` — 搜索命令
+- `dispatch_tool("eca", "eca_call", '{"command": "...", "arguments": {...}}')` — 执行命令
+
+**Blueprint Lisp DSL（蓝图逻辑的首选方式）**:
+实现蓝图逻辑时，优先使用 Blueprint Lisp DSL 而不是逐个操作节点：
+- `blueprint_to_lisp` — 读取现有蓝图为 Lisp 代码
+- `lisp_to_blueprint` — 用 Lisp 代码生成蓝图节点（自动创建、连线、布局）
+- `blueprint_lisp_help` — 查看 DSL 语法文档
+
+详细语法参见: `Skills/blueprint_lisp_guide.md`

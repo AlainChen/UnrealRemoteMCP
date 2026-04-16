@@ -135,6 +135,23 @@ dispatch_tool(domain="behaviortree", tool_name="bt_add_node",
 - 需要**创建/修改蓝图或 UMG 资产** → 先征求写入确认，再用 Blueprint/UMG 相关 MCP API
 - 需要**创建/编辑行为树** → `get_dispatch("behaviortree")` 然后用 `bt_*` 系列工具
 - 需要**底层 EdGraph 节点操作** → `get_dispatch("edgraph")` 然后用 `edgraph_*` 系列工具
+- 需要**蓝图逻辑实现**（事件/函数/分支/循环）→ **优先用 eca domain 的 Blueprint Lisp DSL**，一次调用替代 5-10 次节点操作
+- 需要**程序化建模/Niagara VFX/材质编辑/MVVM/WidgetTree/DataTable** → `eca` domain（238+ 原子命令）
+- 不确定 ECA 有没有某个功能 → `dispatch_tool("eca", "eca_search", '{"keyword": "关键词"}')`
+
+### ECA Domain（238+ 原子命令，按需发现）
+
+通过 `eca` domain 可调用 ECABridge 的 238+ C++ 原子命令（19 个分类）。
+**不要猜测命令名**，用以下流程发现：
+
+1. `dispatch_tool("eca", "eca_search", '{"keyword": "mesh"}')` — 按关键词搜索
+2. `dispatch_tool("eca", "eca_list", '{"category": "BlueprintLisp"}')` — 按分类列出
+3. `dispatch_tool("eca", "eca_call", '{"command": "...", "arguments": {...}}')` — 执行命令
+
+**Blueprint Lisp DSL（蓝图逻辑的首选方式）：**
+- 读取蓝图: `eca_call("blueprint_to_lisp", {"blueprint_path": "/Game/..."})`
+- 写入蓝图: `eca_call("lisp_to_blueprint", {"blueprint_path": "/Game/...", "code": "(event BeginPlay (print \"Hello\"))"})`
+- 语法帮助: `eca_call("blueprint_lisp_help", {"topic": "all"})`
 
 ## 输出要求（每次回答尽量包含）
 

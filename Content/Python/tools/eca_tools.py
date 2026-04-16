@@ -57,12 +57,12 @@ def register_eca_tools(mcp: UnrealMCP) -> None:
     mcp.set_domain_description(
         "eca",
         (
-            "ECABridge 代理 — 238+ C++ 原子命令，覆盖：\n"
-            "Actor (8) / Asset (31) / Blueprint (13) / Blueprint Node (24) / "
-            "Blueprint Lisp (4) / Component (5) / DataTable (4) / Editor (14) / "
-            "Material Node (16) / Mesh (40) / Niagara (23) / MVVM (11) / "
-            "Widget Tree (15) / View (3) / Save (4) / Project (5) / AI (4) / Events (3)\n"
-            "使用 eca_list 发现命令，eca_call 执行命令。"
+            "ECABridge 238+ C++ 原子命令，19 个分类。\n"
+            "★ 蓝图逻辑实现 → 必须用 BlueprintLisp（lisp_to_blueprint），一次调用替代 5-10 次节点操作\n"
+            "★ 发现命令 → eca_search(keyword) 或 eca_list(category)，不要猜测命令名\n"
+            "分类: Actor(8) Asset(31) Blueprint(13) BlueprintLisp(4) BlueprintNode(24) "
+            "Component(5) DataTable(4) Editor(14) MaterialNode(16) Mesh(40) "
+            "Niagara(23) MVVM(11) WidgetTree(15) View(3) Save(4) Project(5) AI(4) Events(3)"
         ),
     )
 
@@ -70,13 +70,13 @@ def register_eca_tools(mcp: UnrealMCP) -> None:
 
     @mcp.domain_tool("eca")
     def eca_status() -> Dict[str, Any]:
-        """Check whether ECABridge is available and return summary info.
+        """Check whether ECABridge is available. Call this first before using other eca tools.
 
         Returns:
             {
                 "available": bool,
-                "categories": [...] or null,
-                "command_count": int or 0,
+                "categories": ["Actor", "Blueprint", "BlueprintLisp", "Mesh", ...] or null,
+                "command_count": int (238 when fully available),
                 "message": str
             }
         """
@@ -128,8 +128,10 @@ def register_eca_tools(mcp: UnrealMCP) -> None:
         """List ECA commands, optionally filtered by category.
 
         Args:
-            category: Filter by category name (e.g. "Actor", "Blueprint", "Mesh").
-                      Empty string returns all commands.
+            category: Filter by category name. Empty string returns all commands.
+                      Common categories: Actor, Asset, Blueprint, BlueprintLisp,
+                      BlueprintNode, Component, DataTable, Editor, MaterialNode,
+                      Mesh, Niagara, MVVM, WidgetTree, View, Save, Project, AI, Events.
 
         Returns:
             {
@@ -149,11 +151,16 @@ def register_eca_tools(mcp: UnrealMCP) -> None:
     def eca_call(command: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Execute any ECA command by name.
 
-        This is the primary tool for invoking ECABridge functionality.
-        Use eca_list() first to discover available commands and their parameters.
+        ★ PREFERRED for Blueprint logic: command="lisp_to_blueprint"
+          (one call replaces 5-10 manual node operations)
+        ★ Read Blueprint as Lisp: command="blueprint_to_lisp"
+        ★ Syntax help: command="blueprint_lisp_help" (topic: forms/events/flow/expressions/math/arrays/examples/all)
+
+        Discovery: use eca_search(keyword) or eca_list(category) first.
+        Do NOT guess command names — always discover first.
 
         Args:
-            command: ECA command name (e.g. "get_actors_in_level", "create_actor").
+            command: ECA command name (e.g. "lisp_to_blueprint", "get_actors_in_level").
             arguments: Command-specific parameters as a dict. Defaults to {}.
 
         Returns:
@@ -180,6 +187,9 @@ def register_eca_tools(mcp: UnrealMCP) -> None:
     @mcp.domain_tool("eca")
     def eca_search(keyword: str, category: str = "") -> Dict[str, Any]:
         """Search ECA commands by keyword in name and description.
+
+        Use this when you don't know the exact command name.
+        Example: eca_search("mesh boolean") → finds mesh_boolean command.
 
         Args:
             keyword: Search term (case-insensitive, matched against name and description).
