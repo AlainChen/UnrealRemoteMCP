@@ -158,8 +158,44 @@ UBlueprint* FUnrealMCPCommonUtils::FindBlueprint(const FString& BlueprintName)
 
 UBlueprint* FUnrealMCPCommonUtils::FindBlueprintByName(const FString& BlueprintName)
 {
-    FString AssetPath = TEXT("/Game/Blueprints/") + BlueprintName;
-    return LoadObject<UBlueprint>(nullptr, *AssetPath);
+    if (BlueprintName.IsEmpty())
+    {
+        return nullptr;
+    }
+
+    // 1. Full path: try direct load, then with .Name suffix (UE ObjectPath format)
+    if (BlueprintName.StartsWith(TEXT("/")) )
+    {
+        UBlueprint* BP = LoadObject<UBlueprint>(nullptr, *BlueprintName);
+        if (BP)
+        {
+            return BP;
+        }
+        // /Game/Path/Name -> /Game/Path/Name.Name
+        FString BaseName = FPaths::GetBaseFilename(BlueprintName);
+        FString WithSuffix = BlueprintName + TEXT(".") + BaseName;
+        BP = LoadObject<UBlueprint>(nullptr, *WithSuffix);
+        if (BP)
+        {
+            return BP;
+        }
+    }
+
+    // 2. Short name: search AssetRegistry (works regardless of directory)
+    FAssetRegistryModule& ARM = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+    TArray<FAssetData> Assets;
+    ARM.Get().GetAssetsByClass(UBlueprint::StaticClass()->GetClassPathName(), Assets);
+    for (const FAssetData& Asset : Assets)
+    {
+        if (Asset.AssetName.ToString() == BlueprintName)
+        {
+            return Cast<UBlueprint>(Asset.GetAsset());
+        }
+    }
+
+    // 3. Fallback: legacy /Game/Blueprints/ path (backward compat)
+    FString LegacyPath = TEXT("/Game/Blueprints/") + BlueprintName;
+    return LoadObject<UBlueprint>(nullptr, *LegacyPath);
 }
 
 UEdGraph* FUnrealMCPCommonUtils::FindOrCreateEventGraph(UBlueprint* Blueprint)

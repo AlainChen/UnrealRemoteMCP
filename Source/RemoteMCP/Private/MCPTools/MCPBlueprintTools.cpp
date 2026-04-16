@@ -32,12 +32,21 @@ FJsonObjectParameter UMCPBlueprintTools::HandleCreateBlueprint(const FJsonObject
         return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'name' parameter"));
     }
 
-    // Check if blueprint already exists
+    // Resolve package path and asset name
+    // If name is a full path (e.g. "/Game/AI/BP_Test"), split into path + name
     FString PackagePath;
-    if (!Params->TryGetStringField(TEXT("package_path"), PackagePath))
-        PackagePath = TEXT("/Game/Blueprints/");
     FString AssetName;
-    Params->TryGetStringField(TEXT("package_path"), AssetName);
+    if (BlueprintName.StartsWith(TEXT("/")))
+    {
+        PackagePath = FPaths::GetPath(BlueprintName);
+        AssetName = FPaths::GetBaseFilename(BlueprintName);
+    }
+    else
+    {
+        if (!Params->TryGetStringField(TEXT("package_path"), PackagePath))
+            PackagePath = TEXT("/Game/Blueprints/");
+        AssetName = BlueprintName;
+    }
     auto FinalPath = FPaths::Combine(PackagePath, AssetName);
     if (UEditorAssetLibrary::DoesAssetExist(FinalPath))
     {

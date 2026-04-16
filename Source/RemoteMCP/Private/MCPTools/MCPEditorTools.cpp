@@ -532,9 +532,8 @@ FJsonObjectParameter UMCPEditorTools::HandleSpawnBlueprintActor(const FJsonObjec
         return FUnrealMCPCommonUtils::CreateErrorResponse(TEXT("Missing 'actor_name' parameter"));
     }
 
-    // 查找蓝图资源
-    FString AssetPath = TEXT("/Game/Blueprints/") + BlueprintName;
-    UBlueprint* Blueprint = LoadObject<UBlueprint>(nullptr, *AssetPath);
+    // 查找蓝图资源（支持完整路径和短名）
+    UBlueprint* Blueprint = FUnrealMCPCommonUtils::FindBlueprintByName(BlueprintName);
     if (!Blueprint)
     {
         return FUnrealMCPCommonUtils::CreateErrorResponse(FString::Printf(TEXT("Blueprint not found: %s"), *BlueprintName));
